@@ -79,9 +79,9 @@ class UIComponents:
         # Top bar - Battle title and time
         self._render_top_bar(screen, battle)
         
-        # Team status panels (left and right)
-        self._render_team_panel(screen, battle, "player", is_left=True)
-        self._render_team_panel(screen, battle, "enemy", is_left=False)
+        # Strain status panels (left and right)
+        self._render_strain_panel(screen, battle, is_left=True)
+        self._render_strain_panel(screen, battle, is_left=False)
         
         # Event log (bottom)
         self._render_event_log(screen)
@@ -203,6 +203,171 @@ class UIComponents:
                 pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, bar_width, 12), 1)
             
             y_offset += 25
+    
+    def _render_strain_panel(
+        self,
+        screen: pygame.Surface,
+        battle: SpatialBattle,
+        is_left: bool
+    ):
+        """
+        Render a strain/genetic family panel showing population by strain.
+        
+        Args:
+            screen: Pygame surface to draw on
+            battle: The spatial battle
+            is_left: Whether this is the left panel (True) or right (False)
+        """
+        panel_width = 220
+        panel_height = 300
+        margin = 10
+        
+        if is_left:
+            panel_x = margin
+        else:
+            panel_x = screen.get_width() - panel_width - margin
+        
+        panel_y = 90
+        
+        # Panel background
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        pygame.draw.rect(
+            panel_surface,
+            self.panel_bg,
+            pygame.Rect(0, 0, panel_width, panel_height),
+            border_radius=8
+        )
+        screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Header
+        header_text = "GENETIC STRAINS" if is_left else "CREATURES"
+        header_surface = self.text_font.render(header_text, True, self.text_color)
+        header_rect = header_surface.get_rect(centerx=panel_width // 2, top=10)
+        screen.blit(header_surface, (panel_x + header_rect.x, panel_y + header_rect.y))
+        
+        y_offset = 40
+        
+        if is_left:
+            # Left panel: Show strain statistics
+            # Group creatures by strain
+            strain_groups = {}
+            for creature in battle.creatures:
+                strain_id = creature.creature.strain_id
+                if strain_id not in strain_groups:
+                    strain_groups[strain_id] = []
+                strain_groups[strain_id].append(creature)
+            
+            # Sort by population size
+            sorted_strains = sorted(
+                strain_groups.items(),
+                key=lambda x: len([c for c in x[1] if c.is_alive()]),
+                reverse=True
+            )
+            
+            # Display stats for each strain
+            for strain_id, creatures in sorted_strains[:6]:  # Show top 6 strains
+                if y_offset > panel_height - 30:
+                    break
+                
+                alive_count = sum(1 for c in creatures if c.is_alive())
+                total_count = len(creatures)
+                
+                # Calculate average hue for strain color
+                alive_creatures = [c for c in creatures if c.is_alive()]
+                if alive_creatures:
+                    avg_hue = sum(c.creature.hue for c in alive_creatures) / len(alive_creatures)
+                    import colorsys
+                    rgb = colorsys.hsv_to_rgb(avg_hue / 360.0, 0.8, 0.9)
+                    strain_color = tuple(int(255 * x) for x in rgb)
+                else:
+                    strain_color = (100, 100, 100)  # Gray for extinct
+                
+                # Draw color indicator
+                pygame.draw.circle(
+                    screen,
+                    strain_color,
+                    (panel_x + 15, panel_y + y_offset + 6),
+                    8
+                )
+                
+                # Strain info
+                strain_text = f"Strain {strain_id[:8]}"
+                text_surface = self.small_font.render(strain_text, True, self.text_color)
+                screen.blit(text_surface, (panel_x + 30, panel_y + y_offset))
+                
+                # Population count
+                count_text = f"{alive_count}/{total_count}"
+                count_surface = self.small_font.render(count_text, True, self.text_color)
+                screen.blit(count_surface, (panel_x + panel_width - 50, panel_y + y_offset))
+                
+                y_offset += 22
+            
+            # Total alive count
+            if y_offset < panel_height - 40:
+                y_offset += 10
+                total_alive = sum(1 for c in battle.creatures if c.is_alive())
+                total_text = f"Total Alive: {total_alive}/{len(battle.creatures)}"
+                total_surface = self.small_font.render(total_text, True, (200, 255, 200))
+                screen.blit(total_surface, (panel_x + 10, panel_y + y_offset))
+        
+        else:
+            # Right panel: Show individual creature stats
+            alive_count = sum(1 for c in battle.creatures if c.is_alive())
+            
+            # Alive count
+            alive_text = f"Alive: {alive_count}/{len(battle.creatures)}"
+            alive_surface = self.small_font.render(alive_text, True, self.text_color)
+            screen.blit(alive_surface, (panel_x + 10, panel_y + y_offset))
+            y_offset += 25
+            
+            # Show alive creatures
+            alive_creatures = [c for c in battle.creatures if c.is_alive()][:8]
+            
+            for creature in alive_creatures:
+                if y_offset > panel_height - 30:
+                    break
+                
+                # Use creature's hue color
+                creature_color = creature.creature.get_display_color()
+                
+                # Draw color indicator
+                pygame.draw.circle(
+                    screen,
+                    creature_color,
+                    (panel_x + 15, panel_y + y_offset + 6),
+                    6
+                )
+                
+                # Creature name
+                creature_text = f"{creature.creature.name[:10]}"
+                text_surface = self.small_font.render(creature_text, True, self.text_color)
+                screen.blit(text_surface, (panel_x + 30, panel_y + y_offset))
+                
+                # HP bar
+                hp_percent = creature.creature.stats.hp / creature.creature.stats.max_hp
+                bar_width = 80
+                bar_x = panel_x + 130
+                bar_y = panel_y + y_offset + 2
+                
+                # Background
+                pygame.draw.rect(screen, (60, 60, 60), (bar_x, bar_y, bar_width, 10))
+                
+                # Fill
+                if hp_percent > 0.6:
+                    hp_color = (100, 255, 100)
+                elif hp_percent > 0.3:
+                    hp_color = (255, 255, 100)
+                else:
+                    hp_color = (255, 100, 100)
+                
+                fill_width = int(bar_width * hp_percent)
+                if fill_width > 0:
+                    pygame.draw.rect(screen, hp_color, (bar_x, bar_y, fill_width, 10))
+                
+                # Border
+                pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, bar_width, 10), 1)
+                
+                y_offset += 22
     
     def _render_event_log(self, screen: pygame.Surface):
         """Render the event log at the bottom."""
