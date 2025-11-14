@@ -288,6 +288,84 @@ class PopulationManager:
         """
         return [c for c in self.population if c.can_breed()]
     
+    def get_strain_statistics(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get statistics per genetic strain.
+        
+        Returns:
+            Dictionary mapping strain_id to statistics:
+            - alive: Number of alive creatures in this strain
+            - total: Total creatures ever in this strain
+            - mature: Number of mature creatures
+            - extinct: Whether the strain is extinct
+            - avg_hue: Average hue color of the strain
+        """
+        strain_stats = {}
+        alive_creatures = self.get_alive_creatures()
+        
+        for creature in self.population:
+            strain_id = creature.strain_id
+            if strain_id not in strain_stats:
+                strain_stats[strain_id] = {
+                    'alive': 0,
+                    'total': 0,
+                    'mature': 0,
+                    'hues': [],
+                    'extinct': False
+                }
+            
+            strain_stats[strain_id]['total'] += 1
+            
+            if creature.is_alive():
+                strain_stats[strain_id]['alive'] += 1
+                strain_stats[strain_id]['hues'].append(creature.hue)
+                
+                if creature.mature:
+                    strain_stats[strain_id]['mature'] += 1
+        
+        # Calculate average hue and mark extinctions
+        for strain_id, stats in strain_stats.items():
+            if stats['hues']:
+                stats['avg_hue'] = sum(stats['hues']) / len(stats['hues'])
+            else:
+                stats['avg_hue'] = 0
+            
+            stats['extinct'] = stats['alive'] == 0
+            del stats['hues']  # Remove intermediate data
+        
+        return strain_stats
+    
+    def get_dominant_strains(self, top_n: int = 5) -> List[tuple]:
+        """
+        Get the most dominant strains by population.
+        
+        Args:
+            top_n: Number of top strains to return
+            
+        Returns:
+            List of (strain_id, alive_count) tuples, sorted by population
+        """
+        strain_stats = self.get_strain_statistics()
+        
+        # Sort by alive count
+        sorted_strains = sorted(
+            [(sid, stats['alive']) for sid, stats in strain_stats.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )
+        
+        return sorted_strains[:top_n]
+    
+    def get_extinct_strains(self) -> List[str]:
+        """
+        Get list of extinct strain IDs.
+        
+        Returns:
+            List of strain IDs that have no living members
+        """
+        strain_stats = self.get_strain_statistics()
+        return [sid for sid, stats in strain_stats.items() if stats['extinct']]
+    
     def update(self, delta_time: float):
         """
         Update all creatures in population.
