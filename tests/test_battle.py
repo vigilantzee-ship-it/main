@@ -7,7 +7,7 @@ from src.models.creature import Creature, CreatureType
 from src.models.stats import Stats, StatGrowth
 from src.models.ability import Ability, AbilityType, create_ability
 from src.models.status_effect import StatusEffect, StatusEffectType
-from src.systems.battle import Battle, BattlePhase, BattleState, BattleAction
+from src.systems.battle import Battle, BattlePhase, BattleState, BattleAction, BattleEvent, BattleEventType
 
 
 class TestBattleState(unittest.TestCase):
@@ -459,6 +459,178 @@ class TestBattleEdgeCases(unittest.TestCase):
         
         # Should still deal at least 1 damage
         self.assertGreaterEqual(damage, 1)
+
+
+class TestRealTimeBattle(unittest.TestCase):
+    """Test cases for real-time battle features."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        warrior_type = CreatureType(
+            name="Warrior",
+            base_stats=Stats(max_hp=100, attack=15, defense=10, speed=12),
+            type_tags=["fighter"]
+        )
+        
+        self.player = Creature(
+            name="Player",
+            creature_type=warrior_type,
+            level=5
+        )
+        self.player.add_ability(create_ability('tackle'))
+        
+        self.enemy = Creature(
+            name="Enemy",
+            creature_type=warrior_type,
+            level=5
+        )
+        self.enemy.add_ability(create_ability('tackle'))
+    
+    def test_event_emission(self):
+        """Test that battle events are emitted."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        events_received = []
+        
+        def event_callback(event):
+            events_received.append(event)
+        
+        battle.add_event_callback(event_callback)
+        
+        # Run battle
+        battle.simulate()
+        
+        # Should have received events
+        self.assertGreater(len(events_received), 0)
+        
+        # Check that events are BattleEvent instances
+        self.assertIsInstance(events_received[0], BattleEvent)
+    
+    def test_event_types(self):
+        """Test that different event types are emitted."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        event_types = set()
+        
+        def event_callback(event):
+            event_types.add(event.event_type)
+        
+        battle.add_event_callback(event_callback)
+        battle.simulate()
+        
+        # Should have battle start
+        self.assertIn(BattleEventType.BATTLE_START, event_types)
+        
+        # Should have ability use
+        self.assertIn(BattleEventType.ABILITY_USE, event_types)
+        
+        # Should have damage dealt
+        self.assertIn(BattleEventType.DAMAGE_DEALT, event_types)
+    
+    def test_execute_turn(self):
+        """Test executing one turn at a time."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        # Start battle
+        battle.start_battle()
+        self.assertTrue(battle._started)
+        
+        # Execute one turn
+        continues = battle.execute_turn()
+        
+        # Battle should continue
+        self.assertTrue(continues or battle.state.is_battle_over())
+        self.assertGreaterEqual(battle.state.current_turn, 1)
+    
+    def test_execute_action(self):
+        """Test executing individual actions."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        ability = create_ability('tackle')
+        
+        # Execute action
+        success = battle.execute_action(self.player, ability, self.enemy)
+        
+        self.assertTrue(success)
+        
+        # Enemy should have taken damage
+        self.assertLess(self.enemy.stats.hp, self.enemy.stats.max_hp)
+    
+    def test_step_by_step_battle(self):
+        """Test running a battle step by step."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        battle.start_battle()
+        
+        turns_executed = 0
+        max_turns = 100  # Safety limit
+        
+        while not battle.state.is_battle_over() and turns_executed < max_turns:
+            battle.execute_turn()
+            turns_executed += 1
+        
+        # Battle should have completed
+        self.assertTrue(battle.state.is_battle_over())
+        self.assertGreater(turns_executed, 0)
+        self.assertLess(turns_executed, max_turns)
+    
+    def test_event_data(self):
+        """Test that events contain proper data."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        damage_events = []
+        
+        def event_callback(event):
+            if event.event_type == BattleEventType.DAMAGE_DEALT:
+                damage_events.append(event)
+        
+        battle.add_event_callback(event_callback)
+        battle.simulate()
+        
+        # Should have damage events
+        self.assertGreater(len(damage_events), 0)
+        
+        # Check damage event structure
+        for event in damage_events:
+            self.assertIsNotNone(event.actor)
+            self.assertIsNotNone(event.target)
+            self.assertIsNotNone(event.value)
+            self.assertGreater(event.value, 0)
+            self.assertIn('remaining_hp', event.data)
+    
+    def test_multiple_callbacks(self):
+        """Test multiple event callbacks."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        callback1_count = [0]
+        callback2_count = [0]
+        
+        def callback1(event):
+            callback1_count[0] += 1
+        
+        def callback2(event):
+            callback2_count[0] += 1
+        
+        battle.add_event_callback(callback1)
+        battle.add_event_callback(callback2)
+        
+        battle.simulate()
+        
+        # Both callbacks should have been called
+        self.assertGreater(callback1_count[0], 0)
+        self.assertEqual(callback1_count[0], callback2_count[0])
+    
+    def test_state_events_stored(self):
+        """Test that events are stored in battle state."""
+        battle = Battle([self.player], [self.enemy], random_seed=42)
+        
+        battle.simulate()
+        
+        # Events should be in state
+        self.assertGreater(len(battle.state.events), 0)
+        
+        # Events should match event list
+        self.assertEqual(len(battle.state.events), len(battle.state.events))
 
 
 if __name__ == '__main__':

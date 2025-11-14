@@ -1,15 +1,70 @@
 """
 Battle system - Handles combat mechanics and battle simulation.
+
+Supports both instant simulation and real-time step-by-step execution
+for animated/visual battles.
 """
 
-from typing import List, Optional, Dict, Tuple, Any
+from typing import List, Optional, Dict, Tuple, Any, Callable
 from enum import Enum
 import random
+import time
 
 from ..models.creature import Creature
 from ..models.ability import Ability, AbilityType, TargetType
 from ..models.status_effect import StatusEffect, StatusEffectType
 from ..models.stats import StatModifier
+
+
+class BattleEventType(Enum):
+    """Types of battle events for animation/visualization."""
+    BATTLE_START = "battle_start"
+    TURN_START = "turn_start"
+    CREATURE_TURN = "creature_turn"
+    ABILITY_USE = "ability_use"
+    DAMAGE_DEALT = "damage_dealt"
+    HEALING = "healing"
+    STATUS_APPLIED = "status_applied"
+    STATUS_DAMAGE = "status_damage"
+    BUFF_APPLIED = "buff_applied"
+    DEBUFF_APPLIED = "debuff_applied"
+    MISS = "miss"
+    CRITICAL_HIT = "critical_hit"
+    SUPER_EFFECTIVE = "super_effective"
+    NOT_EFFECTIVE = "not_effective"
+    CREATURE_FAINT = "creature_faint"
+    TURN_END = "turn_end"
+    BATTLE_END = "battle_end"
+
+
+class BattleEvent:
+    """
+    Represents a single event in battle for animation/visualization.
+    
+    Events can be used to trigger animations, sound effects, or UI updates.
+    """
+    
+    def __init__(
+        self,
+        event_type: BattleEventType,
+        actor: Optional[Creature] = None,
+        target: Optional[Creature] = None,
+        ability: Optional[Ability] = None,
+        value: Optional[int] = None,
+        message: str = "",
+        data: Optional[Dict] = None
+    ):
+        self.event_type = event_type
+        self.actor = actor
+        self.target = target
+        self.ability = ability
+        self.value = value
+        self.message = message
+        self.data = data or {}
+        self.timestamp = time.time()
+    
+    def __repr__(self):
+        return f"BattleEvent({self.event_type.value}: {self.message})"
 
 
 class BattlePhase(Enum):
@@ -58,6 +113,7 @@ class BattleState:
         phase: Current battle phase
         weather: Current weather condition affecting battle
         terrain: Current terrain affecting battle
+        events: List of battle events for visualization
     """
     
     def __init__(
@@ -72,6 +128,7 @@ class BattleState:
         self.weather = None
         self.terrain = None
         self.status_effects: Dict[str, List[StatusEffect]] = {}
+        self.events: List[BattleEvent] = []
         
         # Initialize status effects for all creatures
         for creature in player_team + enemy_team:
@@ -160,12 +217,199 @@ class Battle:
         if random_seed is not None:
             random.seed(random_seed)
         
+        self._started = False
+        self._current_turn_order: List[Creature] = []
+        self._current_action_index = 0
+        self._event_callbacks: List[Callable[[BattleEvent], None]] = []
+        
         # Log battle start
         self._log(f"Battle started: {len(player_team)} vs {len(enemy_team)}")
+    
+    def add_event_callback(self, callback: Callable[[BattleEvent], None]):
+        """
+        Register a callback function to be called for each battle event.
+        
+        This allows for real-time visualization/animation of battle events.
+        
+        Args:
+            callback: Function that takes a BattleEvent as parameter
+            
+        Example:
+            def on_event(event):
+                if event.event_type == BattleEventType.DAMAGE_DEALT:
+                    print(f"{event.target.name} took {event.value} damage!")
+            
+            battle.add_event_callback(on_event)
+        """
+        self._event_callbacks.append(callback)
+    
+    def _emit_event(self, event: BattleEvent):
+        """
+        Emit a battle event to all registered callbacks.
+        
+        Args:
+            event: The battle event to emit
+        """
+        self.state.events.append(event)
+        for callback in self._event_callbacks:
+            try:
+                callback(event)
+            except Exception as e:
+                # Don't let callback errors break the battle
+                self._log(f"Error in event callback: {e}")
     
     def _log(self, message: str):
         """Add a message to the battle log."""
         self.battle_log.append(message)
+    
+    def start_battle(self):
+        """
+        Initialize the battle and prepare for step-by-step execution.
+        
+        This method should be called before executing turns step by step.
+        """
+        if self._started:
+            return
+        
+        self._started = True
+        self._log("=== Battle Begin ===")
+        
+        # Emit battle start event
+        player = self.state.get_active_player()
+        enemy = self.state.get_active_enemy()
+        self._emit_event(BattleEvent(
+            event_type=BattleEventType.BATTLE_START,
+            actor=player,
+            target=enemy,
+            message="Battle begins!",
+            data={
+                'player_team': [c.name for c in self.state.player_team],
+                'enemy_team': [c.name for c in self.state.enemy_team]
+            }
+        ))
+        
+        self._phase_start()
+    
+    def is_ready_for_action(self) -> bool:
+        """
+        Check if the battle is ready for the next action.
+        
+        Returns:
+            True if battle has started and is not over
+        """
+        return self._started and not self.state.is_battle_over()
+    
+    def get_next_actor(self) -> Optional[Creature]:
+        """
+        Get the creature that will act next.
+        
+        Returns:
+            The creature that will take the next action, or None if turn needs to be set up
+        """
+        if not self._current_turn_order or self._current_action_index >= len(self._current_turn_order):
+            return None
+        return self._current_turn_order[self._current_action_index]
+    
+    def execute_turn(self) -> bool:
+        """
+        Execute one complete turn of battle (both creatures act).
+        
+        This is a step-by-step alternative to simulate(). Call this repeatedly
+        until is_battle_over() returns True.
+        
+        Returns:
+            True if battle continues, False if battle has ended
+        """
+        if not self._started:
+            self.start_battle()
+        
+        if self.state.is_battle_over():
+            if self.state.phase != BattlePhase.BATTLE_END:
+                self._phase_battle_end()
+            return False
+        
+        self.state.current_turn += 1
+        self._log(f"\n--- Turn {self.state.current_turn} ---")
+        
+        # Process turn
+        self._process_turn()
+        
+        # Check for battle end
+        if self.state.is_battle_over():
+            self._phase_battle_end()
+            return False
+        
+        return True
+    
+    def execute_action(self, creature: Creature, ability: Optional[Ability] = None, target: Optional[Creature] = None) -> bool:
+        """
+        Execute a single action for a specific creature.
+        
+        This provides fine-grained control for real-time battles where you want
+        to execute individual actions with potential delays/animations between them.
+        
+        Args:
+            creature: The creature performing the action
+            ability: The ability to use (if None, AI chooses)
+            target: The target of the action (if None, automatically selected)
+            
+        Returns:
+            True if action was executed, False if creature cannot act
+        """
+        if not self._started:
+            self.start_battle()
+        
+        if self.state.is_battle_over():
+            return False
+        
+        # Check if creature can act
+        if not creature.is_alive():
+            self._log(f"{creature.name} is unable to act (incapacitated)")
+            return False
+        
+        if not self._can_act(creature):
+            self._log(f"{creature.name} cannot act due to status effects!")
+            return False
+        
+        # Determine target if not specified
+        if target is None:
+            player = self.state.get_active_player()
+            enemy = self.state.get_active_enemy()
+            
+            if creature == player:
+                target = enemy
+            elif creature == enemy:
+                target = player
+            else:
+                # Creature not in active battle
+                return False
+        
+        if not target or not target.is_alive():
+            return False
+        
+        # Execute action
+        if ability:
+            if not ability.can_use(creature.stats, creature.energy):
+                self._log(f"{creature.name} cannot use {ability.name}!")
+                return False
+            self._execute_ability(creature, target, ability)
+        else:
+            # AI chooses action
+            self._execute_ai_action(creature, target)
+        
+        return True
+    
+    def end_turn(self):
+        """
+        Process end-of-turn effects (status effects, cooldowns, etc.).
+        
+        Call this after all creatures have acted in a turn.
+        """
+        player = self.state.get_active_player()
+        enemy = self.state.get_active_enemy()
+        
+        self.state.phase = BattlePhase.END_OF_TURN
+        self._phase_end_of_turn(player, enemy)
     
     def simulate(self) -> Creature:
         """
@@ -174,10 +418,12 @@ class Battle:
         Returns:
             The winning creature
         """
-        self._log("=== Battle Begin ===")
-        
-        # Battle start phase
-        self._phase_start()
+        # Use start_battle to ensure events are emitted
+        if not self._started:
+            self.start_battle()
+        else:
+            self._log("=== Battle Begin ===")
+            self._phase_start()
         
         # Main battle loop
         while not self.state.is_battle_over():
@@ -338,6 +584,16 @@ class Battle:
         """
         self._log(f"{attacker.name} uses {ability.name}!")
         
+        # Emit ability use event
+        self._emit_event(BattleEvent(
+            event_type=BattleEventType.ABILITY_USE,
+            actor=attacker,
+            target=defender,
+            ability=ability,
+            message=f"{attacker.name} uses {ability.name}!",
+            data={'energy_cost': ability.energy_cost}
+        ))
+        
         # Use the ability (triggers cooldown)
         ability.use()
         
@@ -347,6 +603,13 @@ class Battle:
         # Check accuracy
         if not self._check_accuracy(ability.accuracy):
             self._log(f"{ability.name} missed!")
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.MISS,
+                actor=attacker,
+                target=defender,
+                ability=ability,
+                message=f"{ability.name} missed!"
+            ))
             return
         
         # Calculate and apply damage/effects based on ability type
@@ -355,10 +618,40 @@ class Battle:
             actual_damage = defender.stats.take_damage(damage)
             self._log(f"{defender.name} takes {actual_damage} damage! (HP: {defender.stats.hp}/{defender.stats.max_hp})")
             
+            # Emit damage event
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.DAMAGE_DEALT,
+                actor=attacker,
+                target=defender,
+                ability=ability,
+                value=actual_damage,
+                message=f"{defender.name} takes {actual_damage} damage!",
+                data={'remaining_hp': defender.stats.hp, 'max_hp': defender.stats.max_hp}
+            ))
+            
+            # Check if creature fainted
+            if not defender.is_alive():
+                self._emit_event(BattleEvent(
+                    event_type=BattleEventType.CREATURE_FAINT,
+                    target=defender,
+                    message=f"{defender.name} fainted!"
+                ))
+            
         elif ability.ability_type == AbilityType.HEALING:
             heal_amount = ability.power
             actual_heal = attacker.stats.heal(heal_amount)
             self._log(f"{attacker.name} heals {actual_heal} HP! (HP: {attacker.stats.hp}/{attacker.stats.max_hp})")
+            
+            # Emit healing event
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.HEALING,
+                actor=attacker,
+                target=attacker,
+                ability=ability,
+                value=actual_heal,
+                message=f"{attacker.name} heals {actual_heal} HP!",
+                data={'remaining_hp': attacker.stats.hp, 'max_hp': attacker.stats.max_hp}
+            ))
             
         elif ability.ability_type == AbilityType.BUFF:
             self._apply_stat_changes(attacker, ability, is_buff=True)
@@ -398,8 +691,22 @@ class Battle:
         
         if effectiveness > 1.0:
             self._log("It's super effective!")
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.SUPER_EFFECTIVE,
+                actor=attacker,
+                target=defender,
+                message="It's super effective!",
+                data={'effectiveness': effectiveness}
+            ))
         elif effectiveness < 1.0 and effectiveness > 0:
             self._log("It's not very effective...")
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.NOT_EFFECTIVE,
+                actor=attacker,
+                target=defender,
+                message="It's not very effective...",
+                data={'effectiveness': effectiveness}
+            ))
         elif effectiveness == 0:
             self._log("It has no effect!")
         
@@ -407,9 +714,17 @@ class Battle:
         damage = int(damage * random.uniform(0.85, 1.0))
         
         # Apply critical hit chance (6.25% chance for 1.5x damage)
-        if random.random() < 0.0625:
+        is_critical = random.random() < 0.0625
+        if is_critical:
             damage = int(damage * 1.5)
             self._log("Critical hit!")
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.CRITICAL_HIT,
+                actor=attacker,
+                target=defender,
+                message="Critical hit!",
+                data={'damage_multiplier': 1.5}
+            ))
         
         return max(1, damage)
     
