@@ -73,6 +73,18 @@ class Breeding:
         child_hue += random.uniform(-15, 15)  # Mutation range
         child_hue = child_hue % 360  # Wrap around
         
+        # Determine strain_id (inherit from parent or create new strain on major mutation)
+        # If parents are same strain, child inherits it unless major mutation occurs
+        if parent1.strain_id == parent2.strain_id:
+            # Same strain - small chance of mutation creating new strain
+            if random.random() < self.mutation_rate * 0.3:  # 3% chance with default mutation_rate
+                child_strain_id = None  # Will create new strain
+            else:
+                child_strain_id = parent1.strain_id
+        else:
+            # Different strains - inherit from random parent
+            child_strain_id = random.choice([parent1.strain_id, parent2.strain_id])
+        
         # Create offspring
         offspring = Creature(
             name=f"{parent1.name[:4]}{parent2.name[:4]}",
@@ -84,7 +96,8 @@ class Breeding:
             age=0.0,
             mature=False,
             parent_ids=[parent1.creature_id, parent2.creature_id],
-            hue=child_hue
+            hue=child_hue,
+            strain_id=child_strain_id
         )
         
         return offspring
@@ -98,7 +111,7 @@ class Breeding:
         Determine which traits the offspring inherits.
         
         Each parent trait has a chance (default 70-90%) to be inherited.
-        Mutations may modify inherited traits.
+        Mutations may modify inherited traits, add new ones, or remove existing ones.
         
         Args:
             parent1: First parent creature
@@ -122,15 +135,26 @@ class Breeding:
             # Check inheritance chance (70-90%)
             inheritance_roll = random.uniform(0.7, 0.9)
             if random.random() < inheritance_roll:
+                # Small chance to lose this trait (trait removal mutation)
+                if random.random() < self.mutation_rate * 0.5:
+                    # Trait lost due to mutation
+                    continue
+                
                 # Inherit the trait
                 new_trait = trait  # Could copy if Trait had a copy method
                 
-                # Apply potential mutation
+                # Apply potential mutation (modify existing trait)
                 if random.random() < self.mutation_rate:
                     new_trait = self.apply_mutation(new_trait)
                 
                 inherited.append(new_trait)
                 trait_names.add(trait.name)
+        
+        # Chance to gain a new trait (trait addition mutation)
+        if random.random() < self.mutation_rate * 0.3:
+            new_trait = self.generate_new_trait()
+            if new_trait and new_trait.name not in trait_names:
+                inherited.append(new_trait)
         
         return inherited
     
@@ -206,6 +230,25 @@ class Breeding:
         )
         
         return mutated
+    
+    def generate_new_trait(self) -> Optional[Trait]:
+        """
+        Generate a completely new trait through mutation.
+        
+        This represents a beneficial or neutral mutation that introduces
+        a new trait into the gene pool.
+        
+        Returns:
+            A new trait, or None if generation fails
+        """
+        from ..models.ecosystem_traits import ALL_ECOSYSTEM_TRAITS
+        
+        # Select a random trait from available ecosystem traits
+        # In a more advanced system, this could generate truly novel traits
+        if ALL_ECOSYSTEM_TRAITS:
+            return random.choice(ALL_ECOSYSTEM_TRAITS)
+        
+        return None
     
     def __repr__(self):
         """String representation of the Breeding system."""

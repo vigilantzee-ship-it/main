@@ -1,28 +1,30 @@
 """
-Lineage model - Tracks fighter ancestry and evolutionary history.
+Lineage model - Tracks creature ancestry, evolutionary history, and strain membership.
 """
 
 
 class Lineage:
     """
-    Tracks the ancestral lineage and breeding history of fighters.
+    Tracks the ancestral lineage, breeding history, and strain membership of creatures.
     
     The lineage system records parent-child relationships, generation numbers,
-    and trait inheritance patterns. This allows players to track evolutionary
-    progress and strategize breeding decisions.
+    trait inheritance patterns, and strain/family membership. This allows tracking
+    evolutionary progress, strain dominance, and genetic diversity.
     
     Attributes:
-        fighter_id (str): Unique identifier for the fighter
-        generation (int): Generation number (0 for original fighters)
+        creature_id (str): Unique identifier for the creature
+        strain_id (str): Genetic strain/family identifier
+        generation (int): Generation number (0 for original creatures)
         parent1_id (str): ID of first parent (None if generation 0)
         parent2_id (str): ID of second parent (None if generation 0)
         inherited_traits (list): List of traits inherited from parents
-        birth_timestamp (float): When the fighter was created/bred
+        birth_timestamp (float): When the creature was created/bred
     """
     
     def __init__(
         self,
-        fighter_id,
+        creature_id,
+        strain_id=None,
         generation=0,
         parent1_id=None,
         parent2_id=None,
@@ -33,14 +35,16 @@ class Lineage:
         Initialize a new Lineage record.
         
         Args:
-            fighter_id (str): Unique identifier for the fighter
+            creature_id (str): Unique identifier for the creature
+            strain_id (str): Genetic strain/family identifier
             generation (int): Generation number
             parent1_id (str): ID of first parent
             parent2_id (str): ID of second parent
             inherited_traits (list): List of inherited trait names
             birth_timestamp (float): Creation timestamp
         """
-        self.fighter_id = fighter_id
+        self.creature_id = creature_id
+        self.strain_id = strain_id
         self.generation = generation
         self.parent1_id = parent1_id
         self.parent2_id = parent2_id
@@ -48,9 +52,9 @@ class Lineage:
         self.birth_timestamp = birth_timestamp
     
     def is_original(self):
-        """Check if this fighter is an original (generation 0)."""
+        """Check if this creature is an original (generation 0)."""
         return self.generation == 0 and self.parent1_id is None and self.parent2_id is None
     
     def __repr__(self):
         """String representation of the Lineage."""
-        return f"Lineage(fighter_id='{self.fighter_id}', generation={self.generation})"
+        return f"Lineage(creature_id='{self.creature_id}', strain_id='{self.strain_id}', generation={self.generation})"

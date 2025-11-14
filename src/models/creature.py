@@ -110,6 +110,7 @@ class Creature:
         mature (bool): Whether creature has reached maturity
         parent_ids (List[str]): IDs of parent creatures
         hue (float): Base hue for HSV color system (0-360)
+        strain_id (str): Genetic strain/family identifier
     """
     
     def __init__(
@@ -130,7 +131,8 @@ class Creature:
         age: float = 0.0,
         mature: bool = False,
         parent_ids: Optional[List[str]] = None,
-        hue: Optional[float] = None
+        hue: Optional[float] = None,
+        strain_id: Optional[str] = None
     ):
         """
         Initialize a new Creature.
@@ -153,6 +155,7 @@ class Creature:
             mature: Whether creature is mature enough to breed
             parent_ids: List of parent creature IDs
             hue: Base hue for color (0-360, random if None)
+            strain_id: Genetic strain/family ID (auto-generated if None)
         """
         self.creature_id = creature_id if creature_id else str(uuid.uuid4())
         self.name = name
@@ -166,6 +169,9 @@ class Creature:
         self.mature = mature
         self.parent_ids = parent_ids if parent_ids else []
         self.hue = hue if hue is not None else random.uniform(0, 360)
+        
+        # Genetic lineage
+        self.strain_id = strain_id if strain_id else str(uuid.uuid4())
         
         # Initialize stats based on type and level
         if base_stats:
@@ -501,7 +507,8 @@ class Creature:
             'age': self.age,
             'mature': self.mature,
             'parent_ids': self.parent_ids,
-            'hue': self.hue
+            'hue': self.hue,
+            'strain_id': self.strain_id
         }
     
     @staticmethod
@@ -539,7 +546,8 @@ class Creature:
             age=data.get('age', 0.0),
             mature=data.get('mature', False),
             parent_ids=data.get('parent_ids', []),
-            hue=data.get('hue')
+            hue=data.get('hue'),
+            strain_id=data.get('strain_id')
         )
         
         # Restore active modifiers
