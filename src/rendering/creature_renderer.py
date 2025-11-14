@@ -57,9 +57,7 @@ class CreatureRenderer:
             battle: The spatial battle containing creatures
         """
         # Render all creatures
-        all_creatures = battle.player_creatures + battle.enemy_creatures
-        
-        for creature in all_creatures:
+        for creature in battle.creatures:
             if creature.is_alive():
                 self._render_creature(screen, creature, battle)
     
@@ -77,19 +75,10 @@ class CreatureRenderer:
             battle.arena
         )
         
-        # Use HSV color from creature, fallback to team colors
-        try:
-            color = creature.creature.get_display_color()
-            # Calculate outline as slightly brighter version
-            outline_color = tuple(min(255, c + 40) for c in color)
-        except AttributeError:
-            # Fallback to team colors for backward compatibility
-            if creature.team == "player":
-                color = self.player_color
-                outline_color = (120, 160, 255)
-            else:
-                color = self.enemy_color
-                outline_color = (255, 140, 140)
+        # Use HSV color from creature
+        color = creature.creature.get_display_color()
+        # Calculate outline as slightly brighter version
+        outline_color = tuple(min(255, c + 40) for c in color)
         
         # Draw creature body (circle)
         pygame.draw.circle(screen, color, screen_pos, self.radius)
