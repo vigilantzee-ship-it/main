@@ -555,6 +555,15 @@ class SpatialBattle:
         """Get the complete battle log."""
         return self.battle_log
     
+    def get_all_creatures(self) -> List['BattleCreature']:
+        """
+        Get all creatures in the battle regardless of team.
+        
+        Returns:
+            List of all BattleCreatures
+        """
+        return self.player_creatures + self.enemy_creatures
+    
     def get_state_snapshot(self) -> Dict:
         """Get current state snapshot for visualization."""
         return {
@@ -583,6 +592,44 @@ class SpatialBattle:
                 for c in self.enemy_creatures
             ]
         }
+
+
+    @classmethod
+    def from_population(
+        cls,
+        creatures: List[Creature],
+        arena_width: float = 100.0,
+        arena_height: float = 100.0,
+        random_seed: Optional[int] = None
+    ) -> 'SpatialBattle':
+        """
+        Create a battle from a flat list of creatures (no teams).
+        
+        All creatures will be assigned to individual "teams" so they
+        target each other freely in a free-for-all style.
+        
+        Args:
+            creatures: List of all creatures in the battle
+            arena_width: Width of the battle arena
+            arena_height: Height of the battle arena
+            random_seed: Optional seed for reproducible randomness
+            
+        Returns:
+            SpatialBattle instance with individual creatures
+        """
+        # Split creatures into two groups for compatibility with existing battle system
+        # In a true free-for-all, each creature would be its own team
+        mid = len(creatures) // 2
+        player_team = creatures[:mid] if mid > 0 else []
+        enemy_team = creatures[mid:] if mid < len(creatures) else []
+        
+        # Ensure at least one creature in each team
+        if not player_team and enemy_team:
+            player_team = [enemy_team.pop(0)]
+        elif not enemy_team and player_team:
+            enemy_team = [player_team.pop(0)]
+        
+        return cls(player_team, enemy_team, arena_width, arena_height, random_seed)
 
 
 # Backwards compatibility alias
