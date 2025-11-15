@@ -11,6 +11,8 @@ from .creature_renderer import CreatureRenderer
 from .ui_components import UIComponents
 from .event_animator import EventAnimator
 from .creature_inspector import CreatureInspector
+from .pause_menu import PauseMenu, PauseMenuAction
+from .post_game_summary import PostGameSummary
 
 __all__ = [
     'GameWindow',
@@ -19,4 +21,7 @@ __all__ = [
     'UIComponents',
     'EventAnimator',
     'CreatureInspector',
+    'PauseMenu',
+    'PauseMenuAction',
+    'PostGameSummary',
 ]

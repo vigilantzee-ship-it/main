@@ -6,11 +6,12 @@ relationships, and achievements in an interactive panel.
 """
 
 import pygame
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from ..models.creature import Creature
 from ..models.history import EventType
 from ..models.skills import SkillType
 from ..models.relationships import RelationshipType
+from ..utils.preferences import get_preferences
 
 
 class CreatureInspector:
@@ -56,6 +57,25 @@ class CreatureInspector:
         self.margin = 20
         self.line_height = 20
         self.section_spacing = 15
+        
+        # Load preferences
+        prefs = get_preferences()
+        
+        # Position and pinning
+        self.is_pinned = prefs.get('inspector.pinned', False)
+        self.position = prefs.get('inspector.position', None)  # Will be set on first render
+        self.auto_hide_timeout = 3.0  # seconds
+        self.auto_hide_timer = 0.0
+        
+        # Drag state
+        self.dragging = False
+        self.drag_offset = (0, 0)
+        self.title_bar_rect = None
+        
+        # Animation
+        self.alpha = 255 if self.visible else 0
+        self.target_alpha = 255 if self.visible else 0
+        self.animation_speed = 800  # alpha units per second
     
     def select_creature(self, creature: Optional[Creature]):
         """
@@ -65,12 +85,54 @@ class CreatureInspector:
             creature: The creature to inspect, or None to deselect
         """
         self.selected_creature = creature
-        self.visible = creature is not None
+        if creature is not None:
+            self.show()
         self.scroll_offset = 0
+    
+    def show(self):
+        """Show the inspector panel with animation."""
+        self.visible = True
+        self.target_alpha = 255
+        self.auto_hide_timer = 0.0
+    
+    def hide(self):
+        """Hide the inspector panel with animation."""
+        self.visible = False
+        self.target_alpha = 0
     
     def toggle_visibility(self):
         """Toggle inspector visibility."""
-        self.visible = not self.visible
+        if self.visible:
+            self.hide()
+        else:
+            self.show()
+    
+    def toggle_pin(self):
+        """Toggle pinned state."""
+        self.is_pinned = not self.is_pinned
+        prefs = get_preferences()
+        prefs.set('inspector.pinned', self.is_pinned)
+        if self.is_pinned:
+            self.auto_hide_timer = 0.0
+    
+    def update(self, dt: float):
+        """
+        Update inspector state (animations, auto-hide, etc.).
+        
+        Args:
+            dt: Delta time in seconds
+        """
+        # Update alpha animation
+        if self.alpha < self.target_alpha:
+            self.alpha = min(self.target_alpha, self.alpha + self.animation_speed * dt)
+        elif self.alpha > self.target_alpha:
+            self.alpha = max(self.target_alpha, self.alpha - self.animation_speed * dt)
+        
+        # Auto-hide logic (if not pinned and visible)
+        if self.visible and not self.is_pinned and self.auto_hide_timeout > 0:
+            self.auto_hide_timer += dt
+            if self.auto_hide_timer >= self.auto_hide_timeout:
+                self.hide()
     
     def handle_scroll(self, direction: int):
         """
@@ -82,6 +144,85 @@ class CreatureInspector:
         scroll_speed = 20
         self.scroll_offset = max(0, min(self.max_scroll, 
                                        self.scroll_offset + direction * scroll_speed))
+        # Reset auto-hide timer on interaction
+        if self.visible:
+            self.auto_hide_timer = 0.0
+    
+    def handle_mouse_event(self, event: pygame.event.Event, screen: pygame.Surface) -> bool:
+        """
+        Handle mouse events for dragging and interaction.
+        
+        Args:
+            event: Pygame event
+            screen: Screen surface (for bounds checking)
+            
+        Returns:
+            True if event was handled, False otherwise
+        """
+        if not self.visible or self.alpha < 10:
+            return False
+        
+        screen_width, screen_height = screen.get_size()
+        panel_width = int(screen_width * self.panel_width_pct)
+        panel_height = int(screen_height * self.panel_height_pct)
+        
+        # Set default position if not set
+        if self.position is None:
+            self.position = (screen_width - panel_width - 20, (screen_height - panel_height) // 2)
+        
+        panel_x, panel_y = self.position
+        
+        # Title bar for dragging
+        title_bar_height = 35
+        self.title_bar_rect = pygame.Rect(panel_x, panel_y, panel_width, title_bar_height)
+        
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_pos = pygame.mouse.get_pos()
+            if self.title_bar_rect.collidepoint(mouse_pos):
+                self.dragging = True
+                self.drag_offset = (mouse_pos[0] - panel_x, mouse_pos[1] - panel_y)
+                self.auto_hide_timer = 0.0
+                return True
+            
+            # Check pin button click
+            pin_button_rect = pygame.Rect(panel_x + panel_width - 60, panel_y + 5, 25, 25)
+            if pin_button_rect.collidepoint(mouse_pos):
+                self.toggle_pin()
+                return True
+            
+            # Check close button click
+            close_button_rect = pygame.Rect(panel_x + panel_width - 30, panel_y + 5, 25, 25)
+            if close_button_rect.collidepoint(mouse_pos):
+                self.hide()
+                return True
+        
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.dragging:
+                self.dragging = False
+                # Save position
+                prefs = get_preferences()
+                prefs.set('inspector.position', self.position)
+                return True
+        
+        elif event.type == pygame.MOUSEMOTION:
+            if self.dragging:
+                mouse_pos = pygame.mouse.get_pos()
+                new_x = mouse_pos[0] - self.drag_offset[0]
+                new_y = mouse_pos[1] - self.drag_offset[1]
+                
+                # Keep within screen bounds
+                new_x = max(0, min(new_x, screen_width - panel_width))
+                new_y = max(0, min(new_y, screen_height - panel_height))
+                
+                self.position = (new_x, new_y)
+                return True
+            
+            # Check if mouse is over panel (reset auto-hide)
+            panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+            if panel_rect.collidepoint(pygame.mouse.get_pos()):
+                self.auto_hide_timer = 0.0
+        
+        return False
     
     def render(self, screen: pygame.Surface):
         """
@@ -90,7 +231,11 @@ class CreatureInspector:
         Args:
             screen: Pygame surface to draw on
         """
-        if not self.visible or not self.selected_creature:
+        # Don't render if completely invisible
+        if self.alpha < 1:
+            return
+        
+        if not self.selected_creature:
             return
         
         creature = self.selected_creature
@@ -99,37 +244,76 @@ class CreatureInspector:
         # Calculate panel dimensions
         panel_width = int(screen_width * self.panel_width_pct)
         panel_height = int(screen_height * self.panel_height_pct)
-        panel_x = screen_width - panel_width - 20
-        panel_y = (screen_height - panel_height) // 2
         
-        # Create panel surface with transparency
+        # Set default position if not set
+        if self.position is None:
+            self.position = (screen_width - panel_width - 20, (screen_height - panel_height) // 2)
+        
+        panel_x, panel_y = self.position
+        
+        # Create panel surface with transparency based on alpha
         panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
-        panel.fill(self.bg_color)
         
-        # Draw border
-        pygame.draw.rect(panel, self.highlight_color, panel.get_rect(), 2)
+        # Apply alpha to background
+        bg_color = (*self.bg_color[:3], int(self.bg_color[3] * self.alpha / 255))
+        panel.fill(bg_color)
+        
+        # Draw border with alpha
+        border_color = (*self.highlight_color, int(255 * self.alpha / 255))
+        pygame.draw.rect(panel, border_color, panel.get_rect(), 2)
+        
+        # Draw title bar (for dragging)
+        title_bar_height = 35
+        title_bar_color = (*self.header_color, int(200 * self.alpha / 255))
+        title_bar_rect = pygame.Rect(0, 0, panel_width, title_bar_height)
+        pygame.draw.rect(panel, title_bar_color, title_bar_rect)
+        
+        # Title bar text
+        title_bar_text = self.text_font.render(
+            f"Inspector: {creature.name}",
+            True,
+            (*self.text_color, int(255 * self.alpha / 255))
+        )
+        panel.blit(title_bar_text, (10, 8))
+        
+        # Pin button
+        pin_x = panel_width - 60
+        pin_color = self.success_color if self.is_pinned else (150, 150, 150)
+        pin_symbol = "📌" if self.is_pinned else "○"
+        pin_text = self.text_font.render(pin_symbol, True, (*pin_color, int(255 * self.alpha / 255)))
+        panel.blit(pin_text, (pin_x, 5))
+        
+        # Close button
+        close_x = panel_width - 30
+        close_text = self.text_font.render("✕", True, (*self.warning_color, int(255 * self.alpha / 255)))
+        panel.blit(close_text, (close_x, 5))
         
         # Render content with scrolling
         content_surface = self._render_content(creature, panel_width)
         
         # Calculate max scroll
-        self.max_scroll = max(0, content_surface.get_height() - panel_height + 40)
+        self.max_scroll = max(0, content_surface.get_height() - panel_height + title_bar_height + 10)
+        
+        # Create a clipping area for content
+        content_y = title_bar_height
+        content_height = panel_height - title_bar_height
         
         # Blit scrolled content
-        panel.blit(content_surface, (0, -self.scroll_offset))
+        panel.blit(content_surface, (0, content_y - self.scroll_offset))
         
         # Draw scroll indicators if needed
         if self.max_scroll > 0:
+            indicator_color = (*self.highlight_color, int(255 * self.alpha / 255))
             if self.scroll_offset > 0:
                 # Up arrow
-                pygame.draw.polygon(panel, self.highlight_color, [
-                    (panel_width - 20, 15),
-                    (panel_width - 10, 25),
-                    (panel_width - 30, 25)
+                pygame.draw.polygon(panel, indicator_color, [
+                    (panel_width - 20, content_y + 15),
+                    (panel_width - 10, content_y + 25),
+                    (panel_width - 30, content_y + 25)
                 ])
             if self.scroll_offset < self.max_scroll:
                 # Down arrow
-                pygame.draw.polygon(panel, self.highlight_color, [
+                pygame.draw.polygon(panel, indicator_color, [
                     (panel_width - 20, panel_height - 15),
                     (panel_width - 10, panel_height - 25),
                     (panel_width - 30, panel_height - 25)
@@ -138,9 +322,20 @@ class CreatureInspector:
         # Draw to screen
         screen.blit(panel, (panel_x, panel_y))
         
-        # Draw close button
-        close_text = self.small_font.render("[ESC to close]", True, self.text_color)
-        screen.blit(close_text, (panel_x + 10, panel_y - 20))
+        # Draw control hints below panel
+        hint_y = panel_y + panel_height + 5
+        hints = [
+            "I - Toggle  •  Click title to drag",
+            f"{'📌 Pinned' if self.is_pinned else 'Auto-hide in ' + str(max(0, int(self.auto_hide_timeout - self.auto_hide_timer))) + 's'}"
+        ]
+        
+        for i, hint in enumerate(hints):
+            hint_text = self.small_font.render(
+                hint,
+                True,
+                (200, 200, 200, int(200 * self.alpha / 255))
+            )
+            screen.blit(hint_text, (panel_x + 10, hint_y + i * 18))
     
     def _render_content(self, creature: Creature, panel_width: int) -> pygame.Surface:
         """
