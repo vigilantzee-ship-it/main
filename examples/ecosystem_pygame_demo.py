@@ -66,40 +66,67 @@ def create_ecosystem_creature(name: str, traits: list, level: int = 5) -> Creatu
     return creature
 
 
-def create_ecosystem_battle():
-    """Create an ecosystem battle simulation."""
+def create_ecosystem_battle(
+    num_founders: int = 20,
+    arena_width: float = 100.0,
+    arena_height: float = 100.0,
+    resource_spawn_rate: float = 0.15,
+    initial_resources: int = 20
+):
+    """Create a large, individual-based ecosystem battle with mature founders."""
+    import random
+    
     print("\n=== Creating Ecosystem Battle ===")
     
-    # Create diverse population of creatures with ecosystem traits
-    population = [
-        create_ecosystem_creature("Forager Fox", [FORAGER, EFFICIENT_METABOLISM], level=5),
-        create_ecosystem_creature("Curious Cat", [CURIOUS], level=4),
-        create_ecosystem_creature("Glutton Bear", [GLUTTON], level=6),
-        create_ecosystem_creature("Hunter Wolf", [AGGRESSIVE, VORACIOUS], level=5),
-        create_ecosystem_creature("Cautious Rabbit", [CAUTIOUS, EFFICIENT_METABOLISM], level=4),
-        create_ecosystem_creature("Wanderer Bird", [WANDERER], level=4),
-    ]
+    trait_pool = [FORAGER, EFFICIENT_METABOLISM, CURIOUS, GLUTTON, VORACIOUS, AGGRESSIVE, CAUTIOUS, WANDERER]
+    founders = []
     
-    print("\nInitial Population:")
-    for c in population:
+    for i in range(num_founders):
+        name = f"Founder{i+1}"
+        traits = random.sample(trait_pool, k=2)
+        level = random.randint(3, 6)
+        creature = create_ecosystem_creature(name, traits, level=level)
+        
+        # Mark as mature for immediate breeding
+        if hasattr(creature, "mature"):
+            creature.mature = True
+        
+        # Initialize hunger to max
+        if hasattr(creature, "hunger"):
+            creature.hunger = getattr(creature, "max_hunger", 100)
+        
+        # Ensure full HP
+        if hasattr(creature, "stats"):
+            creature.stats.hp = getattr(creature.stats, "max_hp", creature.stats.hp)
+        
+        # Assign random hue for family colors
+        if hasattr(creature, "hue"):
+            creature.hue = random.uniform(0, 360)
+        
+        founders.append(creature)
+    
+    print(f"\nInitial Population: {num_founders} founders")
+    print("Sample creatures:")
+    for c in founders[:5]:
         trait_names = [t.name for t in c.traits]
-        print(f"  - {c.name}: {', '.join(trait_names)}")
+        print(f"  - {c.name}: {', '.join(trait_names)} (lvl {c.level})")
+    print(f"  ... and {num_founders - 5} more")
     
     print("\n=== Battle Configuration ===")
-    print("Arena: 100x100")
-    print("Initial resources: 10 food items")
-    print("Resource spawn rate: 0.15/second (1 every ~7 seconds)")
-    print("\nWatch the hunger bars (yellow) below HP bars!")
-    print("Creatures will seek food when hungry (hunger < 40%)")
+    print(f"Arena: {arena_width}x{arena_height}")
+    print(f"Initial resources: {initial_resources} food items")
+    print(f"Resource spawn rate: {resource_spawn_rate}/second")
+    print("\nAll founders are MATURE and ready to breed!")
+    print("Watch for breeding, births, deaths, and family lineages!")
     print()
     
     # Create battle with moderate resource spawning
     battle = SpatialBattle(
-        population,
-        arena_width=100.0,
-        arena_height=100.0,
-        resource_spawn_rate=0.15,  # Moderate spawn rate
-        initial_resources=10
+        founders,
+        arena_width=arena_width,
+        arena_height=arena_height,
+        resource_spawn_rate=resource_spawn_rate,
+        initial_resources=initial_resources
     )
     
     return battle
@@ -204,6 +231,15 @@ def main():
         resource_text = f"Food: {len(battle.arena.resources)}"
         text_surface = font.render(resource_text, True, (120, 255, 100))
         window.screen.blit(text_surface, (window.width - 150, 30))
+        
+        # Draw births and deaths statistics
+        births_text = f"Births: {battle.birth_count}"
+        births_surface = font.render(births_text, True, (100, 255, 150))
+        window.screen.blit(births_surface, (window.width - 150, 60))
+        
+        deaths_text = f"Deaths: {battle.death_count}"
+        deaths_surface = font.render(deaths_text, True, (255, 100, 100))
+        window.screen.blit(deaths_surface, (window.width - 150, 90))
         
         # Draw pause indicator
         if paused:

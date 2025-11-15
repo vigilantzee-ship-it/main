@@ -60,6 +60,8 @@ class UIComponents:
             BattleEventType.HEALING,
             BattleEventType.CRITICAL_HIT,
             BattleEventType.CREATURE_FAINT,
+            BattleEventType.CREATURE_BIRTH,
+            BattleEventType.CREATURE_DEATH,
             BattleEventType.BATTLE_START,
             BattleEventType.BATTLE_END
         ]:
