@@ -23,8 +23,9 @@ This allows the rendering layer to remain decoupled from game logic while stayin
 1. **GameWindow** - Main game loop and Pygame lifecycle management
 2. **ArenaRenderer** - Renders the 2D battle arena with team zones
 3. **CreatureRenderer** - Displays creatures with HP/energy bars
-4. **UIComponents** - Manages HUD overlays and information displays
-5. **EventAnimator** - Creates visual effects for battle events
+4. **PelletRenderer** - Renders evolving food pellets with trait-based visuals
+5. **UIComponents** - Manages HUD overlays and information displays
+6. **EventAnimator** - Creates visual effects for battle events
 
 ## Quick Start
 
@@ -120,6 +121,46 @@ creature_renderer = CreatureRenderer(
 )
 ```
 
+### PelletRenderer
+
+Renders evolving food pellets with trait-based visual properties.
+
+**Features:**
+- Color based on pellet's genetic `traits.color`
+- Size scaled by `traits.size` (0.5-2.0 multiplier)
+- Generation markers:
+  - Brighter outline for higher generations
+  - Thicker outline (up to 3px) for evolved pellets
+  - Generation number overlay for gen > 0
+- Toxicity visualization (darker colors for toxic pellets)
+- Glow effect for high-nutrition pellets (>60)
+- Tooltip support for detailed inspection
+
+**Usage:**
+```python
+pellet_renderer = PelletRenderer(
+    base_radius=6,
+    show_generation=True,
+    show_stats_on_hover=False
+)
+
+# Integrate with arena renderer
+arena_renderer.pellet_renderer = pellet_renderer
+
+# Render pellets
+pellet_renderer.render(screen, battle)
+```
+
+**Visual Indicators:**
+- **Color**: Inherited genetic color (RGB)
+- **Size**: 3-15 pixels based on trait
+- **Outline**: White, thicker for evolved pellets
+- **Generation Number**: Small text overlay showing generation
+- **Toxicity**: Darkened color (up to 50% darker)
+- **High Nutrition**: Subtle glow effect
+
+See `examples/pellet_evolution_pygame_demo.py` for complete usage example.
+
 ### UIComponents
 
 Manages HUD overlays and information displays.
@@ -129,6 +170,11 @@ Manages HUD overlays and information displays.
 - Team status panels (left and right)
   - Alive count
   - Individual creature HP bars
+- Pellet Ecosystem panel (optional):
+  - Total pellet count
+  - Average nutrition and range
+  - Maximum generation reached
+  - Average growth rate and toxicity
 - Battle feed / event log (bottom)
 - Pause indicator (center)
 - Battle end overlay with winner
@@ -136,7 +182,10 @@ Manages HUD overlays and information displays.
 
 **Customization:**
 ```python
-ui_components = UIComponents(max_log_entries=8)
+ui_components = UIComponents(
+    max_log_entries=8,
+    show_pellet_stats=True  # Enable pellet statistics panel
+)
 
 # Manually add events to log
 ui_components.add_event_to_log(battle_event)
@@ -183,6 +232,10 @@ The rendering system responds to these battle events:
 | `MISS` | "MISS" popup |
 | `SUPER_EFFECTIVE` | "Super Effective!" popup |
 | `CREATURE_FAINT` | "FAINTED" popup, log entry |
+| `PELLET_SPAWN` | Event log entry (optional) |
+| `PELLET_REPRODUCE` | "+" indicator at pellet location |
+| `PELLET_CONSUMED` | Dissolve effect (infrastructure ready) |
+| `PELLET_DEATH` | "✝" symbol fade out |
 | `BATTLE_END` | Winner overlay |
 
 ## Coordinate Systems

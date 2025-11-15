@@ -7,6 +7,7 @@ Draws the arena boundaries, grid, and any hazards or resources.
 import pygame
 from ..systems.battle_spatial import SpatialBattle
 from ..models.spatial import Vector2D
+from ..models.pellet import Pellet
 
 
 class ArenaRenderer:
@@ -27,7 +28,8 @@ class ArenaRenderer:
         border_color: tuple = (100, 100, 120),
         hazard_color: tuple = (200, 50, 50),
         resource_color: tuple = (50, 200, 100),
-        show_grid: bool = True
+        show_grid: bool = True,
+        pellet_renderer = None
     ):
         """
         Initialize the arena renderer.
@@ -36,14 +38,16 @@ class ArenaRenderer:
             grid_color: RGB color for grid lines
             border_color: RGB color for arena border
             hazard_color: RGB color for hazards
-            resource_color: RGB color for resources
+            resource_color: RGB color for resources (for simple Vector2D resources)
             show_grid: Whether to display the grid
+            pellet_renderer: Optional PelletRenderer for detailed pellet rendering
         """
         self.grid_color = grid_color
         self.border_color = border_color
         self.hazard_color = hazard_color
         self.resource_color = resource_color
         self.show_grid = show_grid
+        self.pellet_renderer = pellet_renderer
         
         # Background colors
         self.bg_color = (30, 30, 40)
@@ -93,9 +97,17 @@ class ArenaRenderer:
         for hazard_pos in battle.arena.hazards:
             self._draw_hazard(screen, hazard_pos, bounds, battle.arena)
         
-        # Draw resources
-        for resource_pos in battle.arena.resources:
-            self._draw_resource(screen, resource_pos, bounds, battle.arena)
+        # Draw resources (delegate pellets to pellet_renderer if available)
+        if self.pellet_renderer:
+            # Draw only simple Vector2D resources here
+            for resource in battle.arena.resources:
+                if isinstance(resource, Vector2D):
+                    self._draw_resource(screen, resource, bounds, battle.arena)
+            # Pellets will be rendered by pellet_renderer separately
+        else:
+            # No pellet renderer, draw all resources simply
+            for resource_pos in battle.arena.resources:
+                self._draw_resource(screen, resource_pos, bounds, battle.arena)
     
     def _get_arena_bounds(self, screen: pygame.Surface) -> tuple:
         """Get the screen bounds for the arena."""
@@ -195,12 +207,24 @@ class ArenaRenderer:
     def _draw_resource(
         self,
         screen: pygame.Surface,
-        resource_pos: Vector2D,
+        resource_pos,
         bounds: tuple,
         arena
     ):
-        """Draw a resource/food at the specified position."""
-        screen_pos = self._world_to_screen(resource_pos, bounds, arena)
+        """
+        Draw a resource/food at the specified position.
+        
+        Draws simple Vector2D resources as green circles.
+        Pellet objects should be rendered by PelletRenderer for detailed visualization.
+        """
+        # Handle both Vector2D and Pellet (for backward compatibility)
+        if isinstance(resource_pos, Pellet):
+            # Use pellet position
+            pos = Vector2D(resource_pos.x, resource_pos.y)
+        else:
+            pos = resource_pos
+        
+        screen_pos = self._world_to_screen(pos, bounds, arena)
         # Draw food as a circle with a distinctive color
         pygame.draw.circle(screen, (80, 200, 60), screen_pos, 8)  # Green center
         pygame.draw.circle(screen, (120, 255, 100), screen_pos, 8, 2)  # Bright green outline

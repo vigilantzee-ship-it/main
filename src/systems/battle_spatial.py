@@ -42,6 +42,11 @@ class BattleEventType(Enum):
     CREATURE_DEATH = "creature_death"
     CREATURE_CONSUMED = "creature_consumed"
     BATTLE_END = "battle_end"
+    # Pellet lifecycle events
+    PELLET_SPAWN = "pellet_spawn"
+    PELLET_REPRODUCE = "pellet_reproduce"
+    PELLET_CONSUMED = "pellet_consumed"
+    PELLET_DEATH = "pellet_death"
 
 
 class BattleEvent:
