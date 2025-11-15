@@ -230,6 +230,20 @@ class SpatialBattle:
         """Register a callback function for battle events."""
         self._event_callbacks.append(callback)
     
+    @property
+    def creatures(self) -> List[BattleCreature]:
+        """
+        Get all creatures in the battle (combined from both teams).
+        
+        This property provides backward compatibility with the individual-based
+        battle API, allowing renderers and other systems to iterate over all
+        creatures regardless of team structure.
+        
+        Returns:
+            Combined list of all BattleCreatures from both teams
+        """
+        return self.player_creatures + self.enemy_creatures
+    
     def _emit_event(self, event: BattleEvent):
         """Emit a battle event to all registered callbacks."""
         self.events.append(event)
