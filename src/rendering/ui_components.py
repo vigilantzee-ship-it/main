@@ -383,8 +383,9 @@ class UIComponents:
     def _render_controls_help(self, screen: pygame.Surface):
         """Render controls help in bottom right."""
         controls = [
-            "SPACE - Pause/Resume",
-            "ESC - Exit"
+            "I - Inspector",
+            "SPACE - Pause",
+            "ESC - Menu"
         ]
         
         x = screen.get_width() - 200

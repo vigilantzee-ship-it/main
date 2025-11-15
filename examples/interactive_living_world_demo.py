@@ -22,8 +22,10 @@ from src.models.ecosystem_traits import AGGRESSIVE, CAUTIOUS, FORAGER, EFFICIENT
 from src.models.spatial import Vector2D
 from src.systems.battle_spatial import SpatialBattle, BattleCreature
 from src.systems.living_world import LivingWorldBattleEnhancer
-from src.rendering import GameWindow, ArenaRenderer, CreatureRenderer, UIComponents, EventAnimator
-from src.rendering.creature_inspector import CreatureInspector
+from src.rendering import (
+    GameWindow, ArenaRenderer, CreatureRenderer, UIComponents, EventAnimator,
+    CreatureInspector, PauseMenu, PauseMenuAction, PostGameSummary
+)
 
 
 def create_warrior(name: str, level: int = 5, traits: list = None) -> Creature:
@@ -119,6 +121,8 @@ def main():
     ui_components = UIComponents(max_log_entries=10)
     event_animator = EventAnimator()
     creature_inspector = CreatureInspector()
+    pause_menu = PauseMenu()
+    post_game_summary = PostGameSummary()
     
     # Subscribe to battle events
     battle.add_event_callback(ui_components.add_event_to_log)
@@ -129,13 +133,14 @@ def main():
     clock = pygame.time.Clock()
     running = True
     selected_battle_creature = None
+    show_summary = False
     
     print("\n=== Battle Started ===")
     print("Controls:")
     print("  Click on creatures to inspect their history")
-    print("  SPACE: Pause/Resume")
     print("  I: Toggle inspector")
-    print("  ESC: Exit")
+    print("  SPACE: Pause/Resume")
+    print("  ESC: Pause Menu (NOT quit!)")
     print("\nWatch as creatures develop skills, form rivalries, and create stories!")
     
     while running:
@@ -146,11 +151,50 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+            # Let pause menu handle events first (if visible)
+            if pause_menu.visible:
+                action = pause_menu.handle_input(event)
+                if action == PauseMenuAction.RESUME:
+                    paused = False
+                elif action == PauseMenuAction.RESTART:
+                    # Restart would go here
+                    print("Restart not implemented in demo")
+                    paused = False
+                elif action == PauseMenuAction.QUIT:
                     running = False
+                continue
+            
+            # Let post-game summary handle events (if visible)
+            if show_summary:
+                action = post_game_summary.handle_input(event)
+                if action == 'menu':
+                    running = False
+                elif action == 'replay':
+                    print("Replay not implemented in demo")
+                    running = False
+                elif action == 'export':
+                    filepath = post_game_summary.export_stats()
+                    print(f"Stats exported to: {filepath}")
+                continue
+            
+            # Let inspector handle mouse events first
+            if creature_inspector.handle_mouse_event(event, window.screen):
+                continue
+            
+            # Regular input handling
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    # Open pause menu instead of quitting
+                    if creature_inspector.visible and not creature_inspector.is_pinned:
+                        # Close inspector if it's not pinned
+                        creature_inspector.hide()
+                    else:
+                        # Open pause menu
+                        pause_menu.show()
+                        paused = True
                 elif event.key == pygame.K_SPACE:
-                    paused = not paused
+                    if not pause_menu.visible:
+                        paused = not paused
                 elif event.key == pygame.K_i:
                     creature_inspector.toggle_visibility()
             
@@ -172,7 +216,6 @@ def main():
                         print(f"  Personality: {clicked_creature.creature.personality.get_description()}")
                         print(f"  Battles: {clicked_creature.creature.history.battles_fought}")
                         print(f"  Kills: {len(clicked_creature.creature.history.kills)}")
-                        creature_inspector.visible = True
             
             elif event.type == pygame.MOUSEWHEEL:
                 # Scroll inspector
@@ -181,6 +224,9 @@ def main():
         # Update battle
         if not paused and not battle.is_over:
             battle.update(dt)
+        
+        # Update inspector animations
+        creature_inspector.update(dt)
         
         # Process event animations
         event_animator.process_events(window.screen, battle)
@@ -217,11 +263,18 @@ def main():
         # Render creature inspector
         creature_inspector.render(window.screen)
         
-        # Instructions overlay
-        if not creature_inspector.visible:
+        # Render pause menu (on top of everything)
+        pause_menu.render(window.screen)
+        
+        # Render post-game summary (on top of everything)
+        if show_summary:
+            post_game_summary.render(window.screen)
+        
+        # Instructions overlay (only if inspector not visible and not paused)
+        if not creature_inspector.visible and not pause_menu.visible and not show_summary:
             font = pygame.font.Font(None, 24)
             instruction_text = font.render(
-                "Click on creatures to inspect them!",
+                "Click on creatures to inspect them! Press I to toggle inspector, ESC for menu",
                 True,
                 (255, 255, 100)
             )
@@ -238,9 +291,10 @@ def main():
         pygame.display.flip()
         
         # Check if battle ended
-        if battle.is_over and not paused:
-            pygame.time.wait(3000)
-            break
+        if battle.is_over and not show_summary and not pause_menu.visible:
+            # Show post-game summary
+            post_game_summary.show(battle)
+            show_summary = True
     
     # Show final statistics
     print("\n=== Battle Complete ===")
