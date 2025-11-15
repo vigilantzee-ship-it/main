@@ -102,13 +102,9 @@ def main():
     enhancer.on_battle_start(warriors)
     
     # Create renderers
-    arena_renderer = ArenaRenderer(
-        battle.arena,
-        window.width,
-        window.height
-    )
+    arena_renderer = ArenaRenderer(show_grid=True)
     
-    creature_renderer = CreatureRenderer(arena_renderer)
+    creature_renderer = CreatureRenderer()
     ui_components = UIComponents(max_log_entries=10)
     event_animator = EventAnimator()
     creature_inspector = CreatureInspector()
@@ -153,7 +149,7 @@ def main():
                     mouse_pos = pygame.mouse.get_pos()
                     clicked_creature = _get_creature_at_position(
                         mouse_pos,
-                        battle.creatures,
+                        battle,
                         arena_renderer,
                         window
                     )
@@ -165,6 +161,7 @@ def main():
                         print(f"  Personality: {clicked_creature.creature.personality.get_description()}")
                         print(f"  Battles: {clicked_creature.creature.history.battles_fought}")
                         print(f"  Kills: {len(clicked_creature.creature.history.kills)}")
+                        creature_inspector.visible = True
             
             elif event.type == pygame.MOUSEWHEEL:
                 # Scroll inspector
@@ -174,35 +171,34 @@ def main():
         if not paused and not battle.is_over:
             battle.update(dt)
         
-        # Update animations
-        event_animator.update(dt)
+        # Process event animations
+        event_animator.process_events(window.screen, battle)
         
         # Render
         window.screen.fill((20, 20, 30))
         
         # Render arena and creatures
         arena_renderer.render(window.screen, battle)
+        creature_renderer.render(window.screen, battle)
         
-        for bc in battle.creatures:
-            creature_renderer.render(
+        # Highlight selected creature
+        if selected_battle_creature and selected_battle_creature.is_alive():
+            screen_pos = arena_renderer.world_to_screen(
+                selected_battle_creature.spatial.position,
                 window.screen,
-                bc,
-                show_hunger=(bc.creature.hunger < 50) if hasattr(bc.creature, 'hunger') else False
+                battle.arena
             )
-            
-            # Highlight selected creature
-            if bc == selected_battle_creature:
-                screen_pos = arena_renderer.world_to_screen(bc.spatial.position)
-                pygame.draw.circle(
-                    window.screen,
-                    (255, 255, 0),
-                    (int(screen_pos[0]), int(screen_pos[1])),
-                    30,
-                    3
-                )
+            pygame.draw.circle(
+                window.screen,
+                (255, 255, 0),
+                (int(screen_pos[0]), int(screen_pos[1])),
+                30,
+                3
+            )
         
         # Render event animations
-        event_animator.render(window.screen, arena_renderer)
+        event_animator.update(dt)
+        event_animator.render(window.screen)
         
         # Render UI
         ui_components.render(window.screen, battle, paused)
@@ -264,7 +260,7 @@ def main():
 
 def _get_creature_at_position(
     mouse_pos: tuple,
-    creatures: list,
+    battle,
     arena_renderer: 'ArenaRenderer',
     window: GameWindow
 ) -> 'BattleCreature':
@@ -273,7 +269,7 @@ def _get_creature_at_position(
     
     Args:
         mouse_pos: Mouse (x, y) position
-        creatures: List of battle creatures
+        battle: The spatial battle
         arena_renderer: Arena renderer for coordinate conversion
         window: Game window
         
@@ -282,11 +278,15 @@ def _get_creature_at_position(
     """
     click_radius = 25  # Pixels
     
-    for bc in creatures:
+    for bc in battle.creatures:
         if not bc.is_alive():
             continue
         
-        screen_pos = arena_renderer.world_to_screen(bc.spatial.position)
+        screen_pos = arena_renderer.world_to_screen(
+            bc.spatial.position,
+            window.screen,
+            battle.arena
+        )
         dx = mouse_pos[0] - screen_pos[0]
         dy = mouse_pos[1] - screen_pos[1]
         distance = (dx * dx + dy * dy) ** 0.5
