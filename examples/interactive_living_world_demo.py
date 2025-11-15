@@ -88,8 +88,10 @@ def main():
     for w in warriors:
         print(f"  {w.name}: {w.personality.get_description()}")
     
+    # Create battle with all warriors in a single population
+    # Note: Pass warriors as first positional argument (creatures_or_team1 parameter)
     battle = SpatialBattle(
-        all_creatures=warriors,
+        warriors,  # All creatures in one population
         arena_width=120.0,
         arena_height=90.0,
         resource_spawn_rate=0.0  # No food in this demo
