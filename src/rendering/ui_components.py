@@ -26,12 +26,13 @@ class UIComponents:
         max_log_entries: Maximum number of log entries to keep
     """
     
-    def __init__(self, max_log_entries: int = 8):
+    def __init__(self, max_log_entries: int = 8, show_pellet_stats: bool = True):
         """
         Initialize UI components.
         
         Args:
             max_log_entries: Maximum number of event log entries to display
+            show_pellet_stats: Whether to show pellet statistics panel
         """
         pygame.font.init()
         self.title_font = pygame.font.Font(None, 36)
@@ -41,6 +42,9 @@ class UIComponents:
         # Event log
         self.event_log: Deque[str] = deque(maxlen=max_log_entries)
         self.max_log_entries = max_log_entries
+        
+        # Display options
+        self.show_pellet_stats = show_pellet_stats
         
         # Colors
         self.text_color = (255, 255, 255)
@@ -82,6 +86,10 @@ class UIComponents:
         # Strain status panels (left and right)
         self._render_strain_panel(screen, battle, is_left=True)
         self._render_strain_panel(screen, battle, is_left=False)
+        
+        # Pellet statistics panel (if enabled and pellets exist)
+        if self.show_pellet_stats and battle.arena.pellets:
+            self._render_pellet_stats_panel(screen, battle)
         
         # Event log (bottom)
         self._render_event_log(screen)
@@ -394,6 +402,86 @@ class UIComponents:
         for i, control in enumerate(controls):
             text_surface = self.small_font.render(control, True, (180, 180, 180))
             screen.blit(text_surface, (x, y + i * 18))
+    
+    def _render_pellet_stats_panel(self, screen: pygame.Surface, battle: SpatialBattle):
+        """
+        Render a panel showing pellet population statistics.
+        
+        Args:
+            screen: Pygame surface to draw on
+            battle: The spatial battle containing pellets
+        """
+        pellets = battle.arena.pellets
+        if not pellets:
+            return
+        
+        panel_width = 220
+        panel_height = 180
+        margin = 10
+        
+        # Position below the right panel
+        panel_x = screen.get_width() - panel_width - margin
+        panel_y = 400
+        
+        # Panel background
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        pygame.draw.rect(
+            panel_surface,
+            self.panel_bg,
+            pygame.Rect(0, 0, panel_width, panel_height),
+            border_radius=8
+        )
+        screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Header
+        header_text = "PELLET ECOSYSTEM"
+        header_surface = self.text_font.render(header_text, True, (150, 255, 150))
+        header_rect = header_surface.get_rect(centerx=panel_width // 2, top=10)
+        screen.blit(header_surface, (panel_x + header_rect.x, panel_y + header_rect.y))
+        
+        y_offset = 40
+        
+        # Total count
+        count_text = f"Count: {len(pellets)}"
+        count_surface = self.small_font.render(count_text, True, self.text_color)
+        screen.blit(count_surface, (panel_x + 10, panel_y + y_offset))
+        y_offset += 22
+        
+        # Average nutrition
+        avg_nutrition = sum(p.get_nutritional_value() for p in pellets) / len(pellets)
+        nutrition_text = f"Avg Nutrition: {avg_nutrition:.1f}"
+        nutrition_surface = self.small_font.render(nutrition_text, True, self.text_color)
+        screen.blit(nutrition_surface, (panel_x + 10, panel_y + y_offset))
+        y_offset += 22
+        
+        # Nutrition range
+        min_nutrition = min(p.get_nutritional_value() for p in pellets)
+        max_nutrition = max(p.get_nutritional_value() for p in pellets)
+        range_text = f"Range: {min_nutrition:.0f}-{max_nutrition:.0f}"
+        range_surface = self.small_font.render(range_text, True, self.text_color)
+        screen.blit(range_surface, (panel_x + 10, panel_y + y_offset))
+        y_offset += 22
+        
+        # Max generation
+        max_gen = max(p.generation for p in pellets)
+        gen_text = f"Max Gen: {max_gen}"
+        gen_surface = self.small_font.render(gen_text, True, self.text_color)
+        screen.blit(gen_surface, (panel_x + 10, panel_y + y_offset))
+        y_offset += 22
+        
+        # Average growth rate
+        avg_growth = sum(p.traits.growth_rate for p in pellets) / len(pellets)
+        growth_text = f"Avg Growth: {avg_growth:.3f}"
+        growth_surface = self.small_font.render(growth_text, True, self.text_color)
+        screen.blit(growth_surface, (panel_x + 10, panel_y + y_offset))
+        y_offset += 22
+        
+        # Average toxicity
+        avg_toxicity = sum(p.traits.toxicity for p in pellets) / len(pellets)
+        toxicity_text = f"Avg Toxicity: {avg_toxicity:.2f}"
+        toxicity_surface = self.small_font.render(toxicity_text, True, self.text_color)
+        screen.blit(toxicity_surface, (panel_x + 10, panel_y + y_offset))
+
     
     def draw_battle_timer(self, screen: pygame.Surface, time: float, position: tuple):
         """

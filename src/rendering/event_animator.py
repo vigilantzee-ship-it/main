@@ -242,6 +242,63 @@ class EventAnimator:
                         velocity=(0, -20)
                     )
                 )
+        
+        # Pellet lifecycle events
+        elif event.event_type == BattleEventType.PELLET_REPRODUCE:
+            # Create "+" text at pellet position for reproduction
+            if 'position' in event.data:
+                from ..models.spatial import Vector2D
+                pos = event.data['position']
+                screen_pos = self._world_to_screen(
+                    Vector2D(pos[0], pos[1]),
+                    screen,
+                    battle.arena
+                )
+                
+                self.effects.append(
+                    AnimatedEffect(
+                        position=screen_pos,
+                        text="+",
+                        color=(150, 255, 150),
+                        lifetime=0.8,
+                        velocity=(0, -20)
+                    )
+                )
+        
+        elif event.event_type == BattleEventType.PELLET_CONSUMED:
+            # Create small dissolve effect when pellet is eaten
+            if 'position' in event.data:
+                from ..models.spatial import Vector2D
+                pos = event.data['position']
+                screen_pos = self._world_to_screen(
+                    Vector2D(pos[0], pos[1]),
+                    screen,
+                    battle.arena
+                )
+                
+                # No text, just visual indicator (could add particle effect later)
+                pass
+        
+        elif event.event_type == BattleEventType.PELLET_DEATH:
+            # Create fade effect when pellet dies of old age
+            if 'position' in event.data:
+                from ..models.spatial import Vector2D
+                pos = event.data['position']
+                screen_pos = self._world_to_screen(
+                    Vector2D(pos[0], pos[1]),
+                    screen,
+                    battle.arena
+                )
+                
+                self.effects.append(
+                    AnimatedEffect(
+                        position=screen_pos,
+                        text="✝",
+                        color=(150, 150, 150),
+                        lifetime=1.0,
+                        velocity=(0, -15)
+                    )
+                )
     
     def update(self, delta_time: float):
         """
