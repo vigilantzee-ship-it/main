@@ -18,6 +18,7 @@ from ..models.status_effect import StatusEffect, StatusEffectType
 from ..models.stats import StatModifier
 from ..models.spatial import Vector2D, SpatialEntity, Arena
 from ..models.behavior import SpatialBehavior, BehaviorType
+from ..models.pellet import Pellet, create_random_pellet, create_pellet_from_creature
 from .breeding import Breeding
 
 
@@ -321,9 +322,11 @@ class SpatialBattle:
         self.battle_log.append(message)
     
     def _spawn_resource(self):
-        """Spawn a food resource at a random location in the arena."""
+        """Spawn a food pellet agent at a random location in the arena."""
         resource_pos = self.arena.get_random_position()
-        self.arena.add_resource(resource_pos)
+        # Create a Pellet agent instead of simple Vector2D
+        pellet = create_random_pellet(x=resource_pos.x, y=resource_pos.y)
+        self.arena.add_pellet(pellet)
     
     def update(self, delta_time: float):
         """
@@ -363,11 +366,16 @@ class SpatialBattle:
                 creature.creature.stats.hp = 0
                 self.death_count += 1
                 self._log(f"{creature.creature.name} starved to death!")
+                # Spawn pellets from starved creature
+                self._spawn_pellets_from_creature(creature)
                 self._emit_event(BattleEvent(
                     event_type=BattleEventType.CREATURE_DEATH,
                     target=creature,
                     message=f"{creature.creature.name} starved to death!"
                 ))
+        
+        # Update pellet lifecycle (age, reproduce, die)
+        self._update_pellets(delta_time)
         
         # Update each creature
         for creature in alive_creatures:
@@ -416,8 +424,11 @@ class SpatialBattle:
         # Determine movement - prioritize food if hungry
         if seeking_food:
             # Override behavior to seek nearest food
-            nearest_resource = min(self.arena.resources, key=lambda r: creature.spatial.position.distance_to(r))
-            movement_target = nearest_resource
+            nearest_resource = min(
+                self.arena.resources,
+                key=lambda r: creature.spatial.position.distance_to(self.arena.get_resource_position(r))
+            )
+            movement_target = self.arena.get_resource_position(nearest_resource)
         else:
             # Determine target with hysteresis to prevent rapid retargeting
             should_retarget = False
@@ -490,13 +501,15 @@ class SpatialBattle:
                     movement_target = None
             else:
                 # Normal movement behavior
+                # Convert resources to Vector2D positions for behavior system
+                resource_positions = [self.arena.get_resource_position(r) for r in self.arena.resources]
                 movement_target = creature.behavior.get_movement_target(
                     creature.spatial,
                     creature.target.spatial if creature.target else None,
                     [],  # No allies in free-for-all
                     other_entities,
                     self.arena.hazards,
-                    self.arena.resources
+                    resource_positions
                 )
         
         # Move towards target with smooth acceleration
@@ -520,12 +533,21 @@ class SpatialBattle:
         # Check for resource collection
         resources_to_remove = []
         for resource in self.arena.resources:
-            distance = creature.spatial.position.distance_to(resource)
+            # Get resource position (works for both Vector2D and Pellet)
+            resource_pos = self.arena.get_resource_position(resource)
+            distance = creature.spatial.position.distance_to(resource_pos)
+            
             if distance < 2.0:  # Collection range
                 # Check if creature can eat plant resources (herbivore or omnivore)
                 if creature.creature.can_eat_food_type("plant"):
+                    # Get nutritional value (Pellet or default)
+                    if isinstance(resource, Pellet):
+                        food_value = int(resource.get_nutritional_value())
+                    else:
+                        food_value = 40  # Default for legacy Vector2D resources
+                    
                     # Eat the resource
-                    hunger_restored = creature.creature.eat(40, food_type="plant")
+                    hunger_restored = creature.creature.eat(food_value, food_type="plant")
                     if hunger_restored > 0:
                         resources_to_remove.append(resource)
                         self._log(f"{creature.creature.name} ate food and restored {hunger_restored} hunger!")
@@ -534,7 +556,7 @@ class SpatialBattle:
                             actor=creature,
                             message=f"{creature.creature.name} ate food! Hunger: {creature.creature.hunger}/{creature.creature.max_hunger}",
                             data={
-                                'resource_position': resource.to_tuple(),
+                                'resource_position': resource_pos.to_tuple(),
                                 'hunger_restored': hunger_restored,
                                 'current_hunger': creature.creature.hunger
                             }
@@ -674,6 +696,9 @@ class SpatialBattle:
                     target=defender,
                     message=f"{defender.creature.name} was defeated!"
                 ))
+                
+                # Spawn pellets from defeated creature (unless consumed)
+                self._spawn_pellets_from_creature(defender, count=2)
                 
                 # Allow nearby carnivores/omnivores to consume the corpse
                 self._handle_corpse_consumption(defender, attacker)
@@ -822,6 +847,77 @@ class SpatialBattle:
                         'corpse_name': corpse.creature.name
                     }
                 ))
+    
+    def _spawn_pellets_from_creature(self, creature: BattleCreature, count: int = 3):
+        """
+        Spawn pellets when a creature dies.
+        
+        Args:
+            creature: The creature that died
+            count: Number of pellets to spawn from the corpse
+        """
+        # Calculate nutritional value based on creature's size/stats
+        base_nutrition = 30.0 + (creature.creature.stats.max_hp / 10.0)
+        
+        for i in range(count):
+            # Spawn pellets near the creature's position
+            offset_x = random.uniform(-3, 3)
+            offset_y = random.uniform(-3, 3)
+            pellet = create_pellet_from_creature(
+                x=creature.spatial.position.x + offset_x,
+                y=creature.spatial.position.y + offset_y,
+                creature_nutritional_value=base_nutrition
+            )
+            # Clamp position to arena bounds
+            pellet.x = max(0, min(self.arena.width, pellet.x))
+            pellet.y = max(0, min(self.arena.height, pellet.y))
+            self.arena.add_pellet(pellet)
+    
+    def _update_pellets(self, delta_time: float):
+        """
+        Update all pellets (age, reproduce, die).
+        
+        Args:
+            delta_time: Time elapsed since last update
+        """
+        pellets_to_remove = []
+        pellets_to_add = []
+        
+        # Get only Pellet objects (not legacy Vector2D resources)
+        for pellet in self.arena.pellets:
+            # Age the pellet
+            pellet.tick(delta_time)
+            
+            # Check if pellet died of old age
+            if pellet.is_dead():
+                pellets_to_remove.append(pellet)
+                continue
+            
+            # Check if pellet can reproduce
+            # Count nearby pellets for density calculation
+            pellet_pos = Vector2D(pellet.x, pellet.y)
+            DENSITY_RADIUS = 20.0
+            nearby_count = sum(
+                1 for p in self.arena.pellets
+                if pellet_pos.distance_to(Vector2D(p.x, p.y)) <= DENSITY_RADIUS
+            )
+            
+            # Attempt reproduction
+            CARRYING_CAPACITY = 50  # Max pellets in local area
+            if pellet.can_reproduce(nearby_count, CARRYING_CAPACITY):
+                offspring = pellet.reproduce(mutation_rate=0.15)
+                # Clamp offspring position to arena bounds
+                offspring.x = max(0, min(self.arena.width, offspring.x))
+                offspring.y = max(0, min(self.arena.height, offspring.y))
+                pellets_to_add.append(offspring)
+        
+        # Remove dead pellets
+        for pellet in pellets_to_remove:
+            self.arena.remove_resource(pellet)
+        
+        # Add new offspring
+        for pellet in pellets_to_add:
+            self.arena.add_pellet(pellet)
     
     def _process_status_effects(self, creature: BattleCreature):
         """Process status effects (simplified for spatial combat)."""
