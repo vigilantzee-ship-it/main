@@ -19,6 +19,7 @@ from .stats import Stats, StatModifier, StatGrowth
 from .ability import Ability, AbilityType, TargetType, AbilityEffect, create_ability
 from .creature import Creature, CreatureType
 from .evolution import EvolutionPath, EvolutionSystem, GeneticsSystem, create_example_evolution_system
+from .pellet import Pellet, PelletTraits, create_random_pellet, create_pellet_from_creature
 
 __all__ = [
     # Legacy models
@@ -43,4 +44,9 @@ __all__ = [
     "EvolutionSystem",
     "GeneticsSystem",
     "create_example_evolution_system",
+    # Pellet system
+    "Pellet",
+    "PelletTraits",
+    "create_random_pellet",
+    "create_pellet_from_creature",
 ]

@@ -6,8 +6,11 @@ in a 2D arena.
 """
 
 import math
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Union, TYPE_CHECKING
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from .pellet import Pellet
 
 
 @dataclass
@@ -133,14 +136,22 @@ class Arena:
         width: Arena width
         height: Arena height
         hazards: List of hazard positions
-        resources: List of resource positions
+        resources: List of resource positions (Vector2D) or Pellet objects
+        pellets: List of Pellet agents (same as resources but typed)
     """
     
     def __init__(self, width: float = 100.0, height: float = 100.0):
         self.width = width
         self.height = height
         self.hazards: List[Vector2D] = []
-        self.resources: List[Vector2D] = []
+        # Support both legacy Vector2D resources and new Pellet agents
+        self.resources: List[Union[Vector2D, 'Pellet']] = []
+    
+    @property
+    def pellets(self) -> List['Pellet']:
+        """Get only Pellet objects from resources (for type safety)."""
+        from .pellet import Pellet
+        return [r for r in self.resources if isinstance(r, Pellet)]
     
     def is_within_bounds(self, position: Vector2D) -> bool:
         """Check if a position is within arena bounds."""
@@ -165,9 +176,55 @@ class Arena:
         """Add a hazard at the specified position."""
         self.hazards.append(position)
     
-    def add_resource(self, position: Vector2D):
-        """Add a resource at the specified position."""
-        self.resources.append(position)
+    def add_resource(self, resource: Union[Vector2D, 'Pellet']):
+        """
+        Add a resource at the specified position.
+        
+        Args:
+            resource: Either a Vector2D position or a Pellet object
+        """
+        self.resources.append(resource)
+    
+    def add_pellet(self, pellet: 'Pellet'):
+        """
+        Add a Pellet agent to the arena.
+        
+        Args:
+            pellet: Pellet object to add
+        """
+        self.resources.append(pellet)
+    
+    def remove_resource(self, resource: Union[Vector2D, 'Pellet']) -> bool:
+        """
+        Remove a resource from the arena.
+        
+        Args:
+            resource: Resource to remove
+            
+        Returns:
+            True if resource was found and removed
+        """
+        try:
+            self.resources.remove(resource)
+            return True
+        except ValueError:
+            return False
+    
+    def get_resource_position(self, resource: Union[Vector2D, 'Pellet']) -> Vector2D:
+        """
+        Get position of a resource (handles both Vector2D and Pellet).
+        
+        Args:
+            resource: Resource object
+            
+        Returns:
+            Vector2D position
+        """
+        if isinstance(resource, Vector2D):
+            return resource
+        else:
+            # It's a Pellet, get its position
+            return Vector2D(resource.x, resource.y)
     
     def get_nearest_hazard(self, position: Vector2D) -> Optional[Tuple[Vector2D, float]]:
         """
@@ -182,15 +239,15 @@ class Arena:
         nearest = min(self.hazards, key=lambda h: position.distance_to(h))
         return (nearest, position.distance_to(nearest))
     
-    def get_nearest_resource(self, position: Vector2D) -> Optional[Tuple[Vector2D, float]]:
+    def get_nearest_resource(self, position: Vector2D) -> Optional[Tuple[Union[Vector2D, 'Pellet'], float]]:
         """
         Find the nearest resource to a position.
         
         Returns:
-            Tuple of (resource_position, distance) or None if no resources
+            Tuple of (resource, distance) or None if no resources
         """
         if not self.resources:
             return None
         
-        nearest = min(self.resources, key=lambda r: position.distance_to(r))
-        return (nearest, position.distance_to(nearest))
+        nearest = min(self.resources, key=lambda r: position.distance_to(self.get_resource_position(r)))
+        return (nearest, position.distance_to(self.get_resource_position(nearest)))
