@@ -99,9 +99,18 @@ def main():
         resource_spawn_rate=0.0  # No food in this demo
     )
     
-    # Create living world enhancer
+    # Create living world enhancer and connect to battle
     enhancer = LivingWorldBattleEnhancer(battle)
+    battle.enhancer = enhancer  # Connect enhancer to battle
     enhancer.on_battle_start(warriors)
+    
+    print("\n=== Living World Features Enabled ===")
+    print("  ✓ Personality-driven target selection and retreat decisions")
+    print("  ✓ Skill-based damage, critical hit, and dodge modifiers")
+    print("  ✓ Relationship-based combat bonuses (revenge, rivalry)")
+    print("  ✓ History tracking for all actions and events")
+    print("  ✓ Achievement detection (Giant Slayer, First Kill, etc.)")
+    print("\nAll creatures now have unique personalities and will develop skills!")
     
     # Create renderers
     arena_renderer = ArenaRenderer(show_grid=True)
@@ -237,27 +246,69 @@ def main():
     print("\n=== Battle Complete ===")
     print("\nFinal Statistics:")
     
-    survivors = [bc for bc in battle.creatures if bc.is_alive()]
+    # Show all creatures (both dead and alive)
+    all_creatures = [(bc, bc.is_alive()) for bc in battle.creatures]
+    survivors = [bc for bc, alive in all_creatures if alive]
+    dead = [bc for bc, alive in all_creatures if not alive]
+    
     if survivors:
         print(f"\nSurvivors: {len(survivors)}")
         for bc in survivors:
             creature = bc.creature
             print(f"\n{creature.name}:")
             print(f"  HP: {creature.stats.hp:.0f}/{creature.stats.max_hp}")
+            print(f"  Personality: {creature.personality.get_description()}")
             print(f"  Battles: {creature.history.battles_fought} ({creature.history.battles_won}W)")
             print(f"  Kills: {len(creature.history.kills)}")
             print(f"  Damage Dealt: {creature.history.total_damage_dealt:.0f}")
+            print(f"  Damage Received: {creature.history.total_damage_received:.0f}")
             
-            # Show top skills
+            # Show top skills with proficiency
             top_skills = creature.skills.get_highest_skills(3)
             if top_skills:
                 print(f"  Top Skills:")
                 for skill_type, level in top_skills:
                     skill = creature.skills.get_skill(skill_type)
-                    print(f"    - {skill.config.name}: Level {level}")
+                    proficiency = skill.get_proficiency()
+                    print(f"    - {skill.config.name}: Level {level} ({proficiency.value}, {skill.experience:.1f} XP)")
+            
+            # Show relationships
+            rivals = creature.relationships.get_rivals()
+            revenge_targets = creature.relationships.get_revenge_targets()
+            if rivals or revenge_targets:
+                print(f"  Relationships:")
+                if rivals:
+                    print(f"    - Rivals: {len(rivals)}")
+                if revenge_targets:
+                    print(f"    - Revenge Targets: {len(revenge_targets)}")
+            
+            # Show achievements
+            if creature.history.achievements:
+                print(f"  Achievements: {', '.join([a.title for a in creature.history.achievements])}")
+    
+    if dead:
+        print(f"\nFallen Warriors: {len(dead)}")
+        for bc in dead:
+            creature = bc.creature
+            print(f"\n{creature.name}:")
+            print(f"  Personality: {creature.personality.get_description()}")
+            print(f"  Cause of Death: {creature.history.cause_of_death}")
+            print(f"  Battles: {creature.history.battles_fought}")
+            print(f"  Kills: {len(creature.history.kills)}")
+            print(f"  Damage Dealt: {creature.history.total_damage_dealt:.0f}")
+            
+            # Show any achievements
+            if creature.history.achievements:
+                print(f"  Achievements: {', '.join([a.title for a in creature.history.achievements])}")
     
     pygame.quit()
     print("\nDemo complete!")
+    print("\nLiving World Features Active:")
+    print("  ✓ Personality-driven AI")
+    print("  ✓ Skill progression")
+    print("  ✓ History tracking")
+    print("  ✓ Relationship formation")
+    print("  ✓ Achievement detection")
 
 
 def _get_creature_at_position(
