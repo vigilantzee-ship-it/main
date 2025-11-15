@@ -115,7 +115,7 @@ def main():
     
     # Subscribe to battle events
     battle.add_event_callback(ui_components.add_event_to_log)
-    battle.add_event_callback(event_animator.add_event)
+    battle.add_event_callback(event_animator.on_battle_event)
     
     # Game state
     paused = False
