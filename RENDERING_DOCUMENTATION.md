@@ -331,6 +331,49 @@ window.quit()
 
 See `tests/test_rendering_screenshot.py` for an example of generating screenshots without a visible window.
 
+## Battle System Compatibility
+
+### Team-Based vs Individual-Based API
+
+The rendering system is designed to work with both team-based and individual-based battle structures:
+
+#### Team-Based SpatialBattle (battle_spatial.py)
+
+```python
+battle = SpatialBattle(player_team, enemy_team)
+
+# Access creatures by team
+for creature in battle.player_creatures:
+    # ...
+
+for creature in battle.enemy_creatures:
+    # ...
+
+# Or use unified access (recommended for renderers)
+for creature in battle.creatures:
+    # All creatures from both teams
+    # ...
+```
+
+The `battle.creatures` property provides backward compatibility by returning a unified list of all creatures from both teams. This allows renderers to iterate over all creatures regardless of team structure.
+
+#### UIComponents Helper Methods
+
+For simplified rendering workflows, UIComponents provides helper methods:
+
+```python
+ui = UIComponents()
+
+# Draw battle timer at specified position
+ui.draw_battle_timer(screen, battle.current_time, (600, 30))
+
+# Draw team status
+ui.draw_team_status(screen, "Team 1", alive_count, total_count, (100, 30))
+
+# Or use full rendering (includes event log, panels, etc.)
+ui.render(screen, battle, paused=False)
+```
+
 ## Future Enhancements
 
 Potential additions to the rendering system:
