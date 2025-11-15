@@ -1,9 +1,21 @@
 # Evolution Battle Game
 
 ## Project Description
-This is an evolution-based battle game where players can engage in battles, breed their fighters, and place bets.
+This is an evolution-based battle game where players can engage in battles, breed their fighters, and place bets. Every creature has a unique story, personality, and history that makes them memorable.
 
 ## Features
+
+### Living World System ✓ NEW!
+Transform battles into emergent narratives where every creature matters:
+- **Individual Histories**: Track every attack, kill, achievement, and life event
+- **Skill Progression**: Skills improve through use (Melee Attack, Dodge, Critical Strike, etc.)
+- **Unique Personalities**: 7 personality traits affect behavior (aggression, caution, loyalty, pride, etc.)
+- **Dynamic Relationships**: Family bonds, rivalries, alliances, and revenge arcs
+- **Achievement System**: Celebrate exceptional moments (Giant Slayer, First Blood, etc.)
+- **Creature Inspector UI**: Click creatures to see their full history and stats
+- **Emergent Stories**: Watch legendary creatures rise and dramatic rivalries form
+
+See [Living World Documentation](LIVING_WORLD_DOCUMENTATION.md) for details.
 
 ### Battle System ✓
 A comprehensive turn-based combat engine featuring:
@@ -86,6 +98,7 @@ This project is developed by three specialist agents working in coordination:
 - **Data & Systems Agent** - Manages game state, persistence, and support systems ([Issue #13](https://github.com/dbmelville2-jpg/evobattle/issues/13))
 
 **Important Documentation:**
+- [**Living World Documentation**](LIVING_WORLD_DOCUMENTATION.md) - **NEW!** Creature histories, skills, personalities, relationships
 - [Battle System Documentation](BATTLE_SYSTEM_DOCUMENTATION.md) - Complete battle system guide
 - [Core Models Documentation](MODELS_DOCUMENTATION.md) - Creature, stats, and ability systems
 - [Ecosystem Documentation](ECOSYSTEM_DOCUMENTATION.md) - Hunger, foraging, and survival mechanics
@@ -100,6 +113,10 @@ This project is developed by three specialist agents working in coordination:
 All examples should be run from the project root directory using Python's module syntax:
 
 ```bash
+# Living World demos (NEW!)
+python3 -m examples.living_world_demo              # Text-based: See histories and skills
+python3 -m examples.interactive_living_world_demo  # Visual: Click creatures to inspect
+
 # Battle system examples
 python3 -m examples.battle_system_example
 
