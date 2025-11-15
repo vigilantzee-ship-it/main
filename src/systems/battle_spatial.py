@@ -18,6 +18,7 @@ from ..models.status_effect import StatusEffect, StatusEffectType
 from ..models.stats import StatModifier
 from ..models.spatial import Vector2D, SpatialEntity, Arena
 from ..models.behavior import SpatialBehavior, BehaviorType
+from .breeding import Breeding
 
 
 class BattleEventType(Enum):
@@ -36,6 +37,8 @@ class BattleEventType(Enum):
     CREATURE_FAINT = "creature_faint"
     HAZARD_DAMAGE = "hazard_damage"
     RESOURCE_COLLECTED = "resource_collected"
+    CREATURE_BIRTH = "creature_birth"
+    CREATURE_DEATH = "creature_death"
     BATTLE_END = "battle_end"
 
 
@@ -193,6 +196,13 @@ class SpatialBattle:
         self.resource_spawn_rate = resource_spawn_rate
         self.time_since_last_resource_spawn: float = 0.0
         
+        # Breeding system and population statistics
+        self.breeding_system = Breeding(mutation_rate=0.1, trait_inheritance_chance=0.8)
+        self.birth_count: int = 0
+        self.death_count: int = 0
+        self.breeding_cooldown: float = 5.0  # Seconds between breeding attempts
+        self.last_breeding_check: float = 0.0
+        
         if random_seed is not None:
             random.seed(random_seed)
         
@@ -333,9 +343,10 @@ class SpatialBattle:
             creature.creature.tick_hunger(delta_time)
             # Check if creature starved
             if creature.creature.hunger <= 0 and creature.is_alive():
+                self.death_count += 1
                 self._log(f"{creature.creature.name} starved to death!")
                 self._emit_event(BattleEvent(
-                    event_type=BattleEventType.CREATURE_FAINT,
+                    event_type=BattleEventType.CREATURE_DEATH,
                     target=creature,
                     message=f"{creature.creature.name} starved to death!"
                 ))
@@ -344,6 +355,11 @@ class SpatialBattle:
         for creature in alive_creatures:
             if creature.is_alive():  # Re-check after hunger tick
                 self._update_creature(creature, alive_creatures, delta_time)
+        
+        # Check for breeding opportunities (periodically)
+        if self.current_time - self.last_breeding_check >= self.breeding_cooldown:
+            self._check_breeding(alive_creatures)
+            self.last_breeding_check = self.current_time
         
         # Process status effects
         for creature in alive_creatures:
@@ -525,10 +541,11 @@ class SpatialBattle:
             ))
             
             if not defender.is_alive():
+                self.death_count += 1
                 self._emit_event(BattleEvent(
-                    event_type=BattleEventType.CREATURE_FAINT,
+                    event_type=BattleEventType.CREATURE_DEATH,
                     target=defender,
-                    message=f"{defender.creature.name} fainted!"
+                    message=f"{defender.creature.name} was defeated!"
                 ))
         
         elif ability.ability_type == AbilityType.HEALING:
@@ -616,6 +633,74 @@ class SpatialBattle:
         # Status effects would be processed here
         # For now, just tick creature modifiers
         creature.creature.tick_modifiers()
+    
+    def _check_breeding(self, alive_creatures: List[BattleCreature]):
+        """
+        Check for breeding opportunities among creatures.
+        
+        Args:
+            alive_creatures: List of all currently alive creatures
+        """
+        # Only attempt breeding if population is not at critical levels
+        if len(alive_creatures) < 2:
+            return
+        
+        # Find potential breeding pairs (creatures close to each other)
+        breeding_range = 10.0  # Distance within which creatures can breed
+        
+        for i, creature1 in enumerate(alive_creatures):
+            # Skip if creature cannot breed
+            if not creature1.creature.can_breed():
+                continue
+            
+            # Check for nearby potential mates
+            for creature2 in alive_creatures[i+1:]:
+                # Skip if second creature cannot breed
+                if not creature2.creature.can_breed():
+                    continue
+                
+                # Check distance
+                distance = creature1.spatial.distance_to(creature2.spatial)
+                if distance <= breeding_range:
+                    # Attempt breeding
+                    offspring = self.breeding_system.breed(
+                        creature1.creature,
+                        creature2.creature,
+                        birth_time=self.current_time
+                    )
+                    
+                    if offspring:
+                        # Spawn offspring near parents
+                        spawn_pos = Vector2D(
+                            (creature1.spatial.position.x + creature2.spatial.position.x) / 2,
+                            (creature1.spatial.position.y + creature2.spatial.position.y) / 2
+                        )
+                        # Add small random offset
+                        spawn_pos.x += random.uniform(-3, 3)
+                        spawn_pos.y += random.uniform(-3, 3)
+                        spawn_pos = self.arena.clamp_position(spawn_pos)
+                        
+                        # Create battle creature and add to population
+                        battle_offspring = BattleCreature(offspring, spawn_pos)
+                        self._creatures.append(battle_offspring)
+                        self.birth_count += 1
+                        
+                        self._log(f"BIRTH! {creature1.creature.name} and {creature2.creature.name} had offspring: {offspring.name}")
+                        self._emit_event(BattleEvent(
+                            event_type=BattleEventType.CREATURE_BIRTH,
+                            actor=battle_offspring,
+                            message=f"{offspring.name} was born! Parents: {creature1.creature.name} & {creature2.creature.name}",
+                            data={
+                                'parent1': creature1.creature.name,
+                                'parent2': creature2.creature.name,
+                                'position': spawn_pos.to_tuple(),
+                                'hue': offspring.hue,
+                                'strain_id': offspring.strain_id
+                            }
+                        ))
+                        
+                        # Only one offspring per pair per check
+                        break
     
     def _end_battle(self):
         """End the battle when population has collapsed."""
