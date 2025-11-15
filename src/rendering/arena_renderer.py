@@ -113,6 +113,26 @@ class ArenaRenderer:
         
         return (x, y, width, height)
     
+    def world_to_screen(
+        self,
+        world_pos: Vector2D,
+        screen: pygame.Surface,
+        arena
+    ) -> tuple:
+        """
+        Convert world coordinates to screen coordinates.
+        
+        Args:
+            world_pos: World position to convert
+            screen: Pygame surface for bounds calculation
+            arena: Arena object for world dimensions
+            
+        Returns:
+            Tuple of (screen_x, screen_y)
+        """
+        bounds = self._get_arena_bounds(screen)
+        return self._world_to_screen(world_pos, bounds, arena)
+    
     def _draw_grid(self, screen: pygame.Surface, bounds: tuple, arena):
         """Draw grid lines on the arena."""
         x, y, width, height = bounds

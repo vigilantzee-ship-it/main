@@ -147,6 +147,38 @@ class TestRendererCompatibility(unittest.TestCase):
             ui.draw_population_status(screen, 5, 5, (100, 30))
         except AttributeError as e:
             self.fail(f"UIComponents helper method raised AttributeError: {e}")
+    
+    @unittest.skipUnless(PYGAME_AVAILABLE, "pygame not installed")
+    def test_arena_renderer_world_to_screen(self):
+        """Test that ArenaRenderer has public world_to_screen method."""
+        from src.rendering.arena_renderer import ArenaRenderer
+        from src.models.spatial import Vector2D
+        
+        battle = SpatialBattle(
+            self.team1,
+            self.team2,
+            arena_width=100,
+            arena_height=60
+        )
+        
+        renderer = ArenaRenderer(show_grid=True)
+        screen = pygame.Surface((1200, 800))
+        
+        # Test world_to_screen method exists and works
+        test_position = Vector2D(50, 30)  # Center of arena
+        try:
+            screen_pos = renderer.world_to_screen(test_position, screen, battle.arena)
+            self.assertIsInstance(screen_pos, tuple)
+            self.assertEqual(len(screen_pos), 2)
+            self.assertIsInstance(screen_pos[0], int)
+            self.assertIsInstance(screen_pos[1], int)
+            # Screen position should be within bounds
+            self.assertGreater(screen_pos[0], 0)
+            self.assertLess(screen_pos[0], screen.get_width())
+            self.assertGreater(screen_pos[1], 0)
+            self.assertLess(screen_pos[1], screen.get_height())
+        except AttributeError as e:
+            self.fail(f"ArenaRenderer.world_to_screen raised AttributeError: {e}")
 
 
 if __name__ == '__main__':
