@@ -10,6 +10,7 @@ from .arena_renderer import ArenaRenderer
 from .creature_renderer import CreatureRenderer
 from .ui_components import UIComponents
 from .event_animator import EventAnimator
+from .creature_inspector import CreatureInspector
 
 __all__ = [
     'GameWindow',
@@ -17,4 +18,5 @@ __all__ = [
     'CreatureRenderer',
     'UIComponents',
     'EventAnimator',
+    'CreatureInspector',
 ]
