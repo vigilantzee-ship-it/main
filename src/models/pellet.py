@@ -117,6 +117,16 @@ class Pellet:
     parent_id: Optional[str] = None
     generation: int = 0
     
+    def __hash__(self):
+        """Make Pellet hashable based on its unique ID."""
+        return hash(self.pellet_id)
+    
+    def __eq__(self, other):
+        """Compare Pellets by their unique ID."""
+        if not isinstance(other, Pellet):
+            return False
+        return self.pellet_id == other.pellet_id
+    
     def tick(self, delta_time: float = 1.0):
         """
         Update pellet state for one time step.
