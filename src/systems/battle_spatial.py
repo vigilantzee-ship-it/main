@@ -29,6 +29,7 @@ from ..models.pellet import Pellet, create_random_pellet, create_pellet_from_cre
 from ..models.combat_config import CombatConfig
 from ..models.combat_targeting import CombatTargetingSystem, CombatContext, TargetingStrategy
 from ..models.relationships import RelationshipType
+from ..models.injury_tracker import DamageType
 from .breeding import Breeding
 
 
@@ -932,8 +933,23 @@ class SpatialBattle:
             damage = self._apply_relationship_damage_modifier(attacker, defender, damage)
             
             was_alive_before_damage = defender.is_alive()
+            health_before = defender.creature.stats.hp
             actual_damage = defender.creature.stats.take_damage(damage)
+            health_after = defender.creature.stats.hp
             self._log(f"{defender.creature.name} takes {actual_damage} damage! (HP: {defender.creature.stats.hp}/{defender.creature.stats.max_hp})")
+            
+            # Record injury for inspector stats
+            damage_type = DamageType.PHYSICAL if ability.ability_type == AbilityType.PHYSICAL else DamageType.SPECIAL
+            defender.creature.injury_tracker.record_injury(
+                attacker_id=attacker.creature.creature_id,
+                attacker_name=attacker.creature.name,
+                damage_type=damage_type,
+                damage_amount=actual_damage,
+                health_before=health_before,
+                health_after=health_after,
+                was_critical=was_critical,
+                location=(defender.spatial.position.x, defender.spatial.position.y)
+            )
             
             # Record combat memory for both creatures
             attacker.creature.combat_memory.record_attacked(

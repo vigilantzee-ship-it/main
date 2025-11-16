@@ -17,6 +17,7 @@ from ..models.status_effect import StatusEffect, StatusEffectType
 from ..models.stats import StatModifier
 from ..models.spatial import Vector2D, SpatialEntity, Arena
 from ..models.behavior import SpatialBehavior, BehaviorType
+from ..models.injury_tracker import DamageType
 
 
 class BattleEventType(Enum):
@@ -500,8 +501,25 @@ class SpatialBattle:
         # Apply damage or effects
         if ability.ability_type in [AbilityType.PHYSICAL, AbilityType.SPECIAL]:
             damage = self._calculate_damage(attacker.creature, defender.creature, ability)
+            health_before = defender.creature.stats.hp
             actual_damage = defender.creature.stats.take_damage(damage)
+            health_after = defender.creature.stats.hp
             self._log(f"{defender.creature.name} takes {actual_damage} damage! (HP: {defender.creature.stats.hp}/{defender.creature.stats.max_hp})")
+            
+            # Record injury for inspector stats
+            damage_type = DamageType.PHYSICAL if ability.ability_type == AbilityType.PHYSICAL else DamageType.SPECIAL
+            # Note: battle.py doesn't track critical hits separately, so we set was_critical=False
+            # This is acceptable as a minimal change; full critical tracking would require refactoring _calculate_damage
+            defender.creature.injury_tracker.record_injury(
+                attacker_id=attacker.creature.creature_id,
+                attacker_name=attacker.creature.name,
+                damage_type=damage_type,
+                damage_amount=actual_damage,
+                health_before=health_before,
+                health_after=health_after,
+                was_critical=False,  # battle.py doesn't return critical info from _calculate_damage
+                location=None  # battle.py doesn't track spatial positions
+            )
             
             self._emit_event(BattleEvent(
                 event_type=BattleEventType.DAMAGE_DEALT,
