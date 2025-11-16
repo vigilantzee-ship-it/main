@@ -107,6 +107,11 @@ class CombatTargetingSystem:
         if not potential_targets:
             return None
         
+        # Safety check: Remove self from potential targets if somehow present
+        potential_targets = [t for t in potential_targets if t != attacker]
+        if not potential_targets:
+            return None
+        
         # Get current target (if any) for stickiness check
         current_target = attacker.target
         
@@ -162,6 +167,10 @@ class CombatTargetingSystem:
         """
         target_id = target.creature.creature_id
         score = TargetScore(target_id=target_id, total_score=0.0)
+        
+        # Safety check: Never score self as a valid target
+        if attacker == target:
+            return score  # Return 0 score
         
         # Distance score (closer = better, beyond max = 0)
         distance = attacker.spatial.distance_to(target.spatial)

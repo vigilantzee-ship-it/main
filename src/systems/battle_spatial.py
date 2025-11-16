@@ -609,8 +609,8 @@ class SpatialBattle:
             exclude={creature}
         )
         
-        # Filter out allies
-        enemies = [t for t in potential_targets if not self._is_ally(creature, t)]
+        # Filter out allies and self
+        enemies = [t for t in potential_targets if t != creature and not self._is_ally(creature, t)]
         
         if enemies:
             combat_urgency = 1.0
@@ -805,9 +805,12 @@ class SpatialBattle:
                     exclude={creature}
                 )
                 
-                # Filter out allies (don't target family or friends)
+                # Filter out allies (don't target family or friends) and self
                 filtered_targets = []
                 for target in potential_targets:
+                    # Safety check: Never include self
+                    if target == creature:
+                        continue  # Skip self
                     # Check if ally based on relationships
                     if self._is_ally(creature, target):
                         continue  # Skip allies
