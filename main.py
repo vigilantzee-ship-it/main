@@ -217,6 +217,7 @@ def run_battle_loop(window, battle):
     creature_inspector = CreatureInspector()
     pause_menu = PauseMenu()
     post_game_summary = PostGameSummary()
+    font = pygame.font.Font(None, 24)
     
     # Connect pellet renderer to arena renderer
     arena_renderer.pellet_renderer = pellet_renderer
