@@ -6,6 +6,7 @@ This package provides the core game models for EvoBattle:
 - Stats and modifiers for buffs/debuffs
 - Ability system for skills and moves
 - Evolution and genetics systems
+- Environmental simulation (weather, terrain, hazards, day/night)
 - Legacy Fighter, Trait, and Lineage models
 """
 
@@ -20,6 +21,12 @@ from .ability import Ability, AbilityType, TargetType, AbilityEffect, create_abi
 from .creature import Creature, CreatureType
 from .evolution import EvolutionPath, EvolutionSystem, GeneticsSystem, create_example_evolution_system
 from .pellet import Pellet, PelletTraits, create_random_pellet, create_pellet_from_creature
+
+# Environmental simulation
+from .environment import (
+    Environment, WeatherConditions, WeatherType, TerrainType, TerrainCell,
+    TimeOfDay, DayNightCycle, HazardType, EnvironmentalHazard
+)
 
 __all__ = [
     # Legacy models
@@ -49,4 +56,14 @@ __all__ = [
     "PelletTraits",
     "create_random_pellet",
     "create_pellet_from_creature",
+    # Environmental system
+    "Environment",
+    "WeatherConditions",
+    "WeatherType",
+    "TerrainType",
+    "TerrainCell",
+    "TimeOfDay",
+    "DayNightCycle",
+    "HazardType",
+    "EnvironmentalHazard",
 ]

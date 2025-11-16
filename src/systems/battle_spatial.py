@@ -11,6 +11,7 @@ Enhanced with:
 - Personality-driven combat behaviors
 - Configurable combat parameters
 - Cooperative and vengeful tactics
+- Environmental simulation (weather, terrain, day/night, hazards)
 """
 
 from typing import List, Optional, Dict, Callable, Tuple
@@ -31,6 +32,7 @@ from ..models.combat_config import CombatConfig
 from ..models.combat_targeting import CombatTargetingSystem, CombatContext, TargetingStrategy
 from ..models.relationships import RelationshipType
 from ..models.injury_tracker import DamageType
+from ..models.environment import Environment, EnvironmentalHazard, HazardType
 from .breeding import Breeding
 from .grass_growth_system import GrassGrowthSystem
 
@@ -210,7 +212,9 @@ class SpatialBattle:
         resource_spawn_rate: float = 0.1,  # Resources per second
         initial_resources: int = 5,
         living_world_enhancer: Optional['LivingWorldBattleEnhancer'] = None,
-        combat_config: Optional[CombatConfig] = None
+        combat_config: Optional[CombatConfig] = None,
+        environment: Optional[Environment] = None,
+        enable_environment: bool = False
     ):
         """
         Initialize a new spatial battle.
@@ -225,6 +229,8 @@ class SpatialBattle:
             initial_resources: Number of resources to spawn at start
             living_world_enhancer: Optional living world enhancer for deep simulation features
             combat_config: Optional combat configuration (uses defaults if None)
+            environment: Optional environment instance (creates default if None and enable_environment=True)
+            enable_environment: Enable environmental simulation (weather, terrain, day/night)
         """
         # Handle backward compatibility - detect old two-team API
         if team2_or_none is not None:
@@ -236,6 +242,17 @@ class SpatialBattle:
         
         # Combat configuration
         self.combat_config = combat_config if combat_config else CombatConfig()
+        
+        # Environmental simulation
+        if enable_environment or environment is not None:
+            self.environment = environment if environment else Environment(
+                width=arena_width,
+                height=arena_height,
+                enable_weather=True,
+                enable_day_night=True
+            )
+        else:
+            self.environment = None
         
         self.arena = Arena(arena_width, arena_height)
         self.battle_log: List[str] = []
@@ -394,6 +411,13 @@ class SpatialBattle:
         resource_pos = self.arena.get_random_position()
         # Create a Pellet agent instead of simple Vector2D
         pellet = create_random_pellet(x=resource_pos.x, y=resource_pos.y)
+        
+        # Apply environmental quality modifiers
+        if self.environment:
+            quality_modifier = self.environment.get_resource_quality_at(resource_pos)
+            # Adjust nutritional value based on environment
+            pellet.traits.nutritional_value *= quality_modifier
+        
         self.arena.add_pellet(pellet)
     
     def update(self, delta_time: float):
@@ -407,6 +431,10 @@ class SpatialBattle:
             return
         
         self.current_time += delta_time
+        
+        # Update environmental simulation
+        if self.environment:
+            self.environment.update(delta_time)
         
         # Spawn resources over time
         self.time_since_last_resource_spawn += delta_time
@@ -426,8 +454,24 @@ class SpatialBattle:
         
         # Tick hunger and age for all alive creatures
         for creature in alive_creatures:
-            creature.creature.tick_hunger(delta_time)
+            # Apply environmental hunger modifier
+            hunger_delta = delta_time
+            if self.environment and self.environment.weather:
+                hunger_delta *= self.environment.weather.get_hunger_modifier()
+            
+            creature.creature.tick_hunger(hunger_delta)
             creature.creature.tick_age(delta_time)
+            
+            # Apply environmental hazard damage
+            if self.environment:
+                hazard_damage = self.environment.get_total_hazard_damage(creature.spatial.position)
+                if hazard_damage > 0:
+                    # Apply hazard damage with trait resistance
+                    actual_damage = self._calculate_hazard_damage(creature, hazard_damage)
+                    creature.creature.stats.hp = max(0, creature.creature.stats.hp - actual_damage)
+                    if actual_damage > 0:
+                        self._log(f"{creature.creature.name} takes {actual_damage:.1f} environmental damage!")
+            
             # Check if creature starved - kill it if hunger depleted
             if creature.creature.hunger <= 0 and creature.is_alive():
                 # Kill the creature by setting HP to 0
@@ -690,6 +734,21 @@ class SpatialBattle:
         # Move towards target with smooth acceleration
         old_pos = (creature.spatial.position.x, creature.spatial.position.y)
         if movement_target:
+            # Apply environmental movement modifiers
+            movement_speed_modifier = 1.0
+            if self.environment:
+                movement_speed_modifier = self.environment.get_combined_movement_modifier(
+                    creature.spatial.position
+                )
+                # Apply trait-based environmental adaptations
+                movement_speed_modifier *= self._get_creature_environmental_adaptation(
+                    creature, creature.spatial.position
+                )
+            
+            # Temporarily adjust max speed for this movement
+            original_max_speed = creature.spatial.max_speed
+            creature.spatial.max_speed *= movement_speed_modifier
+            
             creature.spatial.move_towards(movement_target, delta_time=delta_time)
             
             # Check if creature is engaged in combat with target
@@ -728,6 +787,10 @@ class SpatialBattle:
             velocity_magnitude = creature.spatial.velocity.magnitude()
             if velocity_magnitude > creature.spatial.max_speed:
                 creature.spatial.velocity = creature.spatial.velocity.normalized() * creature.spatial.max_speed
+            
+            # Restore original max speed
+            if self.environment:
+                creature.spatial.max_speed = original_max_speed
             
             creature.spatial.update(delta_time)
             
@@ -1596,6 +1659,121 @@ class SpatialBattle:
                     
                     # Only one offspring per pair per check
                     break
+    
+    def _get_creature_environmental_adaptation(self, creature: BattleCreature, position: Vector2D) -> float:
+        """
+        Calculate creature's environmental adaptation modifier based on traits.
+        
+        Args:
+            creature: The creature
+            position: Current position
+            
+        Returns:
+            Movement speed modifier (0.5 to 2.0)
+        """
+        if not self.environment:
+            return 1.0
+        
+        modifier = 1.0
+        trait_names = [t.name.lower() for t in creature.creature.traits]
+        
+        # Get terrain type
+        terrain = self.environment.get_terrain_at(position)
+        if terrain:
+            terrain_name = terrain.terrain_type.name.lower()
+            
+            # Terrain-specific adaptations
+            if 'aquatic' in ' '.join(trait_names) and 'water' in terrain_name:
+                modifier *= 2.0  # Double speed in water
+            elif 'aquatic' in ' '.join(trait_names):
+                modifier *= 0.7  # Slower on land
+            
+            if 'rock climber' in ' '.join(trait_names) and 'rocky' in terrain_name:
+                modifier *= 1.5
+            
+            if 'forest dweller' in ' '.join(trait_names) and 'forest' in terrain_name:
+                modifier *= 1.4
+            
+            if 'desert adapted' in ' '.join(trait_names) and 'desert' in terrain_name:
+                modifier *= 1.3
+            
+            if 'marsh navigator' in ' '.join(trait_names) and 'marsh' in terrain_name:
+                modifier *= 1.8
+            
+            if 'all terrain' in ' '.join(trait_names):
+                modifier *= 1.05  # Small bonus everywhere
+        
+        # Weather adaptations
+        if self.environment.weather:
+            temp = self.environment.weather.temperature
+            
+            if 'cold blooded' in ' '.join(trait_names):
+                if temp > 25:
+                    modifier *= 1.2
+                elif temp < 10:
+                    modifier *= 0.8
+            
+            if 'heat resistant' in ' '.join(trait_names) and temp > 30:
+                modifier *= 1.25
+            
+            if 'storm walker' in ' '.join(trait_names):
+                from ..models.environment import WeatherType
+                if self.environment.weather.weather_type == WeatherType.STORMY:
+                    modifier *= 1.1
+        
+        # Time of day adaptations
+        if self.environment.day_night:
+            from ..models.environment import TimeOfDay
+            time_of_day = self.environment.day_night.get_time_of_day()
+            
+            if 'nocturnal' in ' '.join(trait_names):
+                if time_of_day == TimeOfDay.NIGHT:
+                    modifier *= 1.3
+                elif time_of_day == TimeOfDay.DAY:
+                    modifier *= 0.85
+            
+            if 'diurnal' in ' '.join(trait_names):
+                if time_of_day == TimeOfDay.DAY:
+                    modifier *= 1.2
+                elif time_of_day == TimeOfDay.NIGHT:
+                    modifier *= 0.9
+            
+            if 'crepuscular' in ' '.join(trait_names):
+                if time_of_day in (TimeOfDay.DAWN, TimeOfDay.DUSK):
+                    modifier *= 1.25
+        
+        return max(0.5, min(2.0, modifier))
+    
+    def _calculate_hazard_damage(self, creature: BattleCreature, base_damage: float) -> float:
+        """
+        Calculate actual hazard damage after applying trait resistances.
+        
+        Args:
+            creature: The creature taking damage
+            base_damage: Base environmental damage
+            
+        Returns:
+            Actual damage after resistance modifiers
+        """
+        damage = base_damage
+        trait_names = [t.name.lower() for t in creature.creature.traits]
+        
+        # Check for hazard resistance traits
+        if 'fire proof' in ' '.join(trait_names) or 'fire resistant' in ' '.join(trait_names):
+            damage *= 0.0  # Immune to fire
+        elif 'heat resistant' in ' '.join(trait_names):
+            damage *= 0.5  # Half damage from heat-based hazards
+        
+        if 'poison resistant' in ' '.join(trait_names):
+            damage *= 0.3  # 70% reduction from poison
+        
+        if 'thick hide' in ' '.join(trait_names):
+            damage *= 0.8  # 20% reduction from all hazards
+        
+        if 'grounded' in ' '.join(trait_names):
+            damage *= 0.2  # 80% reduction from electrical
+        
+        return damage
     
     def _trigger_environmental_hazard(self, alive_creatures: List[BattleCreature]):
         """
