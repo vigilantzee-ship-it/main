@@ -104,13 +104,13 @@ class BattleCreature:
         self.spatial = SpatialEntity(
             position=position,
             radius=0.6,  # Reduced from 1.0 for smaller collision size
-            max_speed=creature.stats.speed / 10.0  # Convert speed stat to spatial speed
+            max_speed=creature.stats.speed / 4.0  # Increased from /10.0 to /4.0 for more dynamic combat (2.5x faster)
         )
         self.behavior = self._determine_behavior()
         self.target: Optional['BattleCreature'] = None
         self.ability_cooldowns: Dict[str, float] = {}
         self.last_attack_time: float = 0
-        self.attack_cooldown: float = 1.0  # Seconds between attacks
+        self.attack_cooldown: float = 0.5  # Reduced from 1.0 to 0.5 for more dynamic combat
         
         # Target retention to prevent rapid retargeting
         self.target_retention_distance: float = 15.0  # Keep target if within this distance
@@ -507,6 +507,10 @@ class SpatialBattle:
                     )
                     movement_target = self.arena.get_resource_position(nearest_resource)
                 else:
+                    # No food available at all - force switch back to combat mode
+                    current_state = "combat"
+                    creature.last_behavior_state = "combat"
+                    seeking_food = False
                     movement_target = None
         else:
             # ENHANCED TARGETING SYSTEM
@@ -672,6 +676,12 @@ class SpatialBattle:
             
             # Apply boundary repulsion to prevent getting stuck on walls
             self.arena.apply_boundary_repulsion(creature.spatial, margin=3.0, strength=1.2)
+            
+            # Clamp velocity to max speed after all forces applied
+            # This prevents separation/boundary forces from creating excessive velocity
+            velocity_magnitude = creature.spatial.velocity.magnitude()
+            if velocity_magnitude > creature.spatial.max_speed:
+                creature.spatial.velocity = creature.spatial.velocity.normalized() * creature.spatial.max_speed
             
             creature.spatial.update(delta_time)
             

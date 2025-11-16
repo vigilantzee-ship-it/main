@@ -253,9 +253,28 @@ class EventAnimator:
                     self._get_effect_from_pool(
                         position=screen_pos,
                         text="MISS",
-                        color=(150, 150, 150),
-                        lifetime=1.0,
-                        velocity=(0, -30)
+                        color=(200, 200, 255),  # Changed to light blue to be more visible
+                        lifetime=1.2,  # Slightly longer to be more noticeable
+                        velocity=(0, -40)  # Faster rise to stand out
+                    )
+                )
+        
+        elif event.event_type == BattleEventType.ABILITY_USE:
+            # Create ability name text for visual feedback
+            if event.actor:
+                screen_pos = self._world_to_screen(
+                    event.actor.spatial.position,
+                    screen,
+                    battle.arena
+                )
+                
+                self.effects.append(
+                    self._get_effect_from_pool(
+                        position=(screen_pos[0], screen_pos[1] - 25),
+                        text=event.ability.name if event.ability else "Attack!",
+                        color=(255, 255, 150),
+                        lifetime=0.8,
+                        velocity=(0, -20)
                     )
                 )
         
