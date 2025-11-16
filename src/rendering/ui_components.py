@@ -500,11 +500,12 @@ class UIComponents:
         available_height = battle_feed_top - panel_y - 10  # 10px gap
         panel_height = min(180, available_height)  # Cap at 180 or available space
         
-        # Panel background
+        # Panel background with increased opacity for better text visibility
         panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        # Use higher opacity background (230 instead of 180) for better text contrast
         pygame.draw.rect(
             panel_surface,
-            self.panel_bg,
+            (20, 20, 30, 230),
             pygame.Rect(0, 0, panel_width, panel_height),
             border_radius=8
         )
