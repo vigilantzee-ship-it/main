@@ -1,0 +1,249 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║                    ENHANCED COMBAT SYSTEM ARCHITECTURE                 ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                         SPATIAL BATTLE                               │
+│                     (battle_spatial.py)                              │
+│                                                                      │
+│  ┌────────────────┐         ┌───────────────┐                      │
+│  │ Combat Config  │────────▶│ Battle Loop   │                      │
+│  └────────────────┘         └───────┬───────┘                      │
+│                                     │                               │
+│                                     ▼                               │
+│                            ┌────────────────┐                       │
+│                            │ Update Creatures│                      │
+│                            └────────┬───────┘                       │
+│                                     │                               │
+│                 ┌───────────────────┼───────────────────┐          │
+│                 ▼                   ▼                   ▼          │
+│         ┌──────────────┐    ┌──────────────┐   ┌─────────────┐    │
+│         │   Targeting  │    │   Movement   │   │   Combat    │    │
+│         └──────┬───────┘    └──────────────┘   └─────┬───────┘    │
+│                │                                       │            │
+│                ▼                                       ▼            │
+│      ┌──────────────────┐                   ┌──────────────────┐   │
+│      │ Target Selection │                   │ Damage Calculation│  │
+│      └─────────┬────────┘                   └─────────┬────────┘   │
+│                │                                       │            │
+└────────────────┼───────────────────────────────────────┼────────────┘
+                 │                                       │
+                 ▼                                       ▼
+      ┌──────────────────────┐              ┌──────────────────────┐
+      │ COMBAT TARGETING     │              │ RELATIONSHIP         │
+      │ SYSTEM               │              │ MANAGER              │
+      │ (combat_targeting.py)│              │ (relationships.py)   │
+      │                      │              │                      │
+      │ • Score targets      │              │ • Family bonds       │
+      │ • Distance weighting │              │ • Alliances          │
+      │ • Threat assessment  │              │ • Rivalries          │
+      │ • Opportunity calc   │              │ • Revenge targets    │
+      │ • Personality factor │              │ • Combat modifiers   │
+      └──────────┬───────────┘              └──────────────────────┘
+                 │                                       
+                 │                                       
+      ┌──────────┴───────────┐                         
+      ▼                      ▼                          
+┌─────────────┐        ┌─────────────┐                 
+│   COMBAT    │        │ PERSONALITY │                 
+│   MEMORY    │        │  PROFILE    │                 
+│(combat_     │        │(personality │                 
+│ memory.py)  │        │     .py)    │                 
+│             │        │             │                 
+│ • Encounters│        │ • Aggression│                 
+│ • Attackers │        │ • Caution   │                 
+│ • Threats   │        │ • Loyalty   │                 
+│ • Revenge   │        │ • Pride     │                 
+└─────────────┘        └─────────────┘                 
+
+
+═══════════════════════════════════════════════════════
+                   DATA FLOW EXAMPLE
+═══════════════════════════════════════════════════════
+
+1. CREATURE NEEDS TARGET
+   │
+   ├─▶ Build Context (HP%, allies, enemies, family)
+   │
+   ├─▶ Query Spatial Grid (get creatures within max_chase_distance)
+   │
+   ├─▶ Filter Allies (skip family, same strain if enabled)
+   │
+   └─▶ Score Each Target:
+       │
+       ├─ Distance Score (closer = better)
+       ├─ Threat Score (from combat memory)
+       ├─ Relationship Score (revenge > rival > neutral)
+       ├─ Opportunity Score (injured, weak)
+       └─ Personality Score (aggressive/cautious preference)
+       │
+       └─▶ Select Highest Score
+
+2. ATTACK TARGET
+   │
+   ├─▶ Calculate Base Damage (stats + abilities)
+   │
+   ├─▶ Apply Relationship Modifiers:
+   │   ├─ Revenge: +30%
+   │   ├─ Rival: +15%
+   │   ├─ Gang-up: +15% per ally
+   │   ├─ Ally Support: +10%
+   │   └─ Family Protection: +20% if defending injured family
+   │
+   ├─▶ Deal Damage
+   │
+   └─▶ Record in Combat Memory:
+       ├─ Attacker records damage dealt
+       └─ Defender records damage received, threat level
+
+3. TARGET DIES
+   │
+   ├─▶ Record Kill in Combat Memory
+   │
+   └─▶ Update Family Relationships:
+       └─ Create REVENGE_TARGET for all family members
+
+
+═══════════════════════════════════════════════════════
+                  TARGETING FLOW CHART
+═══════════════════════════════════════════════════════
+
+                    ┌─────────────┐
+                    │ Need Target?│
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │Has Target & │
+               ┌────│  Alive &    │────┐
+               │    │Within Range?│    │
+               │    └─────────────┘    │
+              YES                      NO
+               │                        │
+               │                        ▼
+               │              ┌──────────────────┐
+               │              │Should Retarget?  │
+               │              │• Time > min      │
+               │              │• Target too far  │
+               │              │• Better option   │
+               │              └────────┬─────────┘
+               │                       │
+               │                      YES
+               │                       │
+               └───────────────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │Build Context│
+                    │• HP %       │
+                    │• Allies     │
+                    │• Enemies    │
+                    │• Family     │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────────┐
+                    │Query Spatial    │
+                    │Grid for Targets │
+                    │(max_chase_dist) │
+                    └──────┬──────────┘
+                           │
+                    ┌──────▼──────┐
+                    │Filter Allies│
+                    │• Family     │
+                    │• Strain     │
+                    │• Explicit   │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │Score Targets│
+                    │(Multi-factor│
+                    │   scoring)  │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │Select Best  │
+                    │Score Target │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │   ENGAGE!   │
+                    └─────────────┘
+
+
+═══════════════════════════════════════════════════════
+                   SCORING BREAKDOWN
+═══════════════════════════════════════════════════════
+
+Target Score Calculation:
+┌─────────────────────────────────────────────┐
+│                                             │
+│  Total = (Distance × 0.3) +                 │
+│          (Threat × 0.25) +                  │
+│          (Relationship × 0.25) +            │
+│          (Opportunity × 0.2) +              │
+│          (Personality × 0.1)                │
+│                                             │
+└─────────────────────────────────────────────┘
+
+Distance (0-1):
+  1.0 = Very close (optimal)
+  0.5 = Mid range
+  0.0 = Max distance or beyond
+
+Threat (0-1.5):
+  0.0 = Unknown
+  0.5 = Seen before
+  1.0 = Recent attacker
+  1.5 = Revenge target (bonus!)
+
+Relationship (-2 to +1):
+  +1.0 = Revenge target
+  +0.7 = Rival
+  0.0 = Neutral
+  -0.5 = Fear
+  -2.0 = Ally/Family (avoid!)
+
+Opportunity (0-1):
+  +0.5 = Very injured
+  +0.3 = Weaker than us
+  +0.4 = Carnivore vs Herbivore
+
+Personality (-0.5 to +0.5):
+  Aggressive: +bonus for strong
+  Cautious: +bonus for weak
+  Loyal: +bonus when protecting
+  Pride: +bonus for challenges
+
+
+═══════════════════════════════════════════════════════
+                     FILE STRUCTURE
+═══════════════════════════════════════════════════════
+
+src/models/
+├── combat_memory.py         (390 lines)
+│   ├── CombatEncounter      - Single fight record
+│   └── CombatMemory         - Full combat history
+│
+├── combat_targeting.py      (480 lines)
+│   ├── CombatTargetingSystem - Main targeting logic
+│   ├── CombatContext        - Situational awareness
+│   └── TargetScore          - Multi-factor scoring
+│
+├── combat_config.py         (265 lines)
+│   └── CombatConfig         - All tunable parameters
+│
+├── creature.py              (+ combat_memory)
+└── relationships.py         (existing)
+
+src/systems/
+└── battle_spatial.py        (+260, -90 lines)
+    ├── Enhanced targeting
+    ├── Ally/enemy detection
+    ├── Relationship modifiers
+    └── Revenge mechanics
+
+Documentation:
+├── ENHANCED_COMBAT_DOCUMENTATION.md  (11KB)
+├── COMBAT_TUNING_GUIDE.md           (9KB)
+└── COMBAT_REVAMP_SUMMARY.md         (11KB)
+
+Examples:
+└── enhanced_combat_demo.py          (11KB)
