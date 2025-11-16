@@ -7,6 +7,7 @@ team, health, and status.
 
 import pygame
 import math
+from functools import lru_cache
 from ..systems.battle_spatial import SpatialBattle, BattleCreature
 from ..models.spatial import Vector2D
 
@@ -38,6 +39,9 @@ class CreatureRenderer:
         pygame.font.init()
         self.name_font = pygame.font.Font(None, 20)
         self.stat_font = pygame.font.Font(None, 16)
+        
+        # Text surface cache for performance
+        self._text_cache = {}
     
     def render(self, screen: pygame.Surface, battle: SpatialBattle):
         """
@@ -154,7 +158,7 @@ class CreatureRenderer:
         
         # HP text
         hp_text = f"{creature.creature.stats.hp}/{creature.creature.stats.max_hp}"
-        text_surface = self.stat_font.render(hp_text, True, (255, 255, 255))
+        text_surface = self._get_cached_text(hp_text, self.stat_font, (255, 255, 255))
         text_rect = text_surface.get_rect(center=(screen_pos[0], bar_y - 8))
         screen.blit(text_surface, text_rect)
     
@@ -228,16 +232,44 @@ class CreatureRenderer:
     ):
         """Draw creature name below the creature."""
         name_text = f"{creature.creature.name} (Lv.{creature.creature.level})"
-        text_surface = self.name_font.render(name_text, True, (255, 255, 255))
+        text_surface = self._get_cached_text(name_text, self.name_font, (255, 255, 255))
         text_rect = text_surface.get_rect(center=(screen_pos[0], screen_pos[1] + self.radius + 12))
         
         # Draw shadow
-        shadow_surface = self.name_font.render(name_text, True, (0, 0, 0))
+        shadow_surface = self._get_cached_text(name_text, self.name_font, (0, 0, 0))
         shadow_rect = shadow_surface.get_rect(center=(screen_pos[0] + 1, screen_pos[1] + self.radius + 13))
         screen.blit(shadow_surface, shadow_rect)
         
         # Draw text
         screen.blit(text_surface, text_rect)
+    
+    def _get_cached_text(self, text: str, font: pygame.font.Font, color: tuple) -> pygame.Surface:
+        """
+        Get a cached text surface or create and cache it.
+        
+        Args:
+            text: Text to render
+            font: Font to use (reference via font size)
+            color: Text color
+            
+        Returns:
+            Rendered text surface
+        """
+        # Create cache key from text, font size, and color
+        font_size = font.get_height()
+        cache_key = (text, font_size, color)
+        
+        if cache_key not in self._text_cache:
+            # Limit cache size to prevent memory issues
+            if len(self._text_cache) > 200:
+                # Clear oldest 50 entries (simple cache management)
+                keys_to_remove = list(self._text_cache.keys())[:50]
+                for key in keys_to_remove:
+                    del self._text_cache[key]
+            
+            self._text_cache[cache_key] = font.render(text, True, color)
+        
+        return self._text_cache[cache_key]
     
     def _world_to_screen(
         self,

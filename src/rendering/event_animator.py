@@ -27,7 +27,7 @@ class AnimatedEffect:
     
     def __init__(
         self,
-        position: tuple,
+        position: tuple = (0, 0),
         text: str = "",
         color: tuple = (255, 255, 255),
         lifetime: float = 1.0,
@@ -40,6 +40,17 @@ class AnimatedEffect:
         self.age = 0.0
         self.velocity = list(velocity)
         self.font = pygame.font.Font(None, 24)
+        self.active = True
+    
+    def reset(self, position: tuple, text: str, color: tuple, lifetime: float, velocity: tuple):
+        """Reset the effect for reuse (object pooling)."""
+        self.position = list(position)
+        self.text = text
+        self.color = color
+        self.lifetime = lifetime
+        self.age = 0.0
+        self.velocity = list(velocity)
+        self.active = True
     
     def update(self, delta_time: float):
         """Update effect animation."""
@@ -93,6 +104,49 @@ class EventAnimator:
         
         # Store recent events for animation purposes
         self.pending_events: List[BattleEvent] = []
+        
+        # Object pool for AnimatedEffect instances
+        self._effect_pool: List[AnimatedEffect] = []
+        self._max_pool_size = 50  # Limit pool size to prevent unbounded growth
+    
+    def _get_effect_from_pool(
+        self,
+        position: tuple,
+        text: str = "",
+        color: tuple = (255, 255, 255),
+        lifetime: float = 1.0,
+        velocity: tuple = (0, -30)
+    ) -> AnimatedEffect:
+        """
+        Get an effect from the pool or create a new one.
+        
+        Args:
+            position: Screen position
+            text: Text to display
+            color: Effect color
+            lifetime: Effect lifetime in seconds
+            velocity: Movement velocity
+            
+        Returns:
+            An AnimatedEffect instance
+        """
+        if self._effect_pool:
+            effect = self._effect_pool.pop()
+            effect.reset(position, text, color, lifetime, velocity)
+            return effect
+        else:
+            return AnimatedEffect(position, text, color, lifetime, velocity)
+    
+    def _return_effect_to_pool(self, effect: AnimatedEffect):
+        """
+        Return an effect to the pool for reuse.
+        
+        Args:
+            effect: The effect to return to the pool
+        """
+        if len(self._effect_pool) < self._max_pool_size:
+            effect.active = False
+            self._effect_pool.append(effect)
     
     def add_battle_event(self, event: BattleEvent):
         """
@@ -139,7 +193,7 @@ class EventAnimator:
             
             damage_text = f"-{event.value}"
             self.effects.append(
-                AnimatedEffect(
+                self._get_effect_from_pool(
                     position=screen_pos,
                     text=damage_text,
                     color=(255, 100, 100),
@@ -158,7 +212,7 @@ class EventAnimator:
             
             heal_text = f"+{event.value}"
             self.effects.append(
-                AnimatedEffect(
+                self._get_effect_from_pool(
                     position=screen_pos,
                     text=heal_text,
                     color=(100, 255, 100),
@@ -177,7 +231,7 @@ class EventAnimator:
                 )
                 
                 self.effects.append(
-                    AnimatedEffect(
+                    self._get_effect_from_pool(
                         position=(screen_pos[0] + 30, screen_pos[1] - 20),
                         text="CRIT!",
                         color=(255, 255, 100),
@@ -196,7 +250,7 @@ class EventAnimator:
                 )
                 
                 self.effects.append(
-                    AnimatedEffect(
+                    self._get_effect_from_pool(
                         position=screen_pos,
                         text="MISS",
                         color=(150, 150, 150),
@@ -215,7 +269,7 @@ class EventAnimator:
                 )
                 
                 self.effects.append(
-                    AnimatedEffect(
+                    self._get_effect_from_pool(
                         position=(screen_pos[0], screen_pos[1] - 30),
                         text="Super Effective!",
                         color=(255, 200, 50),
@@ -234,7 +288,7 @@ class EventAnimator:
                 )
                 
                 self.effects.append(
-                    AnimatedEffect(
+                    self._get_effect_from_pool(
                         position=screen_pos,
                         text="FAINTED",
                         color=(200, 200, 200),
@@ -256,7 +310,7 @@ class EventAnimator:
                 )
                 
                 self.effects.append(
-                    AnimatedEffect(
+                    self._get_effect_from_pool(
                         position=screen_pos,
                         text="+",
                         color=(150, 255, 150),
@@ -291,7 +345,7 @@ class EventAnimator:
                 )
                 
                 self.effects.append(
-                    AnimatedEffect(
+                    self._get_effect_from_pool(
                         position=screen_pos,
                         text="✝",
                         color=(150, 150, 150),
@@ -311,8 +365,15 @@ class EventAnimator:
         for effect in self.effects:
             effect.update(delta_time)
         
-        # Remove expired effects
-        self.effects = [e for e in self.effects if not e.is_expired()]
+        # Remove expired effects and return them to pool
+        active_effects = []
+        for effect in self.effects:
+            if effect.is_expired():
+                self._return_effect_to_pool(effect)
+            else:
+                active_effects.append(effect)
+        
+        self.effects = active_effects
     
     def render(self, screen: pygame.Surface, battle=None):
         """
