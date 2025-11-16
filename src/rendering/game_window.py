@@ -271,15 +271,20 @@ class GameWindow:
         Returns:
             (screen_x, screen_y) tuple
         """
-        # Reserve space for UI (top and sides)
-        ui_margin_top = 100
-        ui_margin_side = 50
-        ui_margin_bottom = 150
+        # Reserve space for UI panels (top, bottom, and sides)
+        # Left margin for GENETIC STRAINS panel
+        ui_margin_left = 250
+        # Right margin for CREATURES and PELLET ECOSYSTEM panels
+        ui_margin_right = 250
+        # Top margin for header/title
+        ui_margin_top = 80
+        # Bottom margin for Battle Feed
+        ui_margin_bottom = 200
         
-        arena_screen_width = self.width - (ui_margin_side * 2)
+        arena_screen_width = self.width - ui_margin_left - ui_margin_right
         arena_screen_height = self.height - ui_margin_top - ui_margin_bottom
         
-        screen_x = ui_margin_side + (world_x / arena_width) * arena_screen_width
+        screen_x = ui_margin_left + (world_x / arena_width) * arena_screen_width
         screen_y = ui_margin_top + (world_y / arena_height) * arena_screen_height
         
         return (int(screen_x), int(screen_y))
@@ -288,16 +293,27 @@ class GameWindow:
         """
         Get the screen bounds for the arena rendering area.
         
+        Arena is positioned in the center with margins for UI panels:
+        - Left: GENETIC STRAINS panel (250px)
+        - Right: CREATURES + PELLET ECOSYSTEM panels (250px)
+        - Top: Header/title (80px)
+        - Bottom: Battle Feed (200px)
+        
         Returns:
             (x, y, width, height) tuple
         """
-        ui_margin_top = 100
-        ui_margin_side = 50
-        ui_margin_bottom = 150
+        # Left margin for GENETIC STRAINS panel
+        ui_margin_left = 250
+        # Right margin for CREATURES and PELLET ECOSYSTEM panels
+        ui_margin_right = 250
+        # Top margin for header/title
+        ui_margin_top = 80
+        # Bottom margin for Battle Feed
+        ui_margin_bottom = 200
         
-        x = ui_margin_side
+        x = ui_margin_left
         y = ui_margin_top
-        width = self.width - (ui_margin_side * 2)
+        width = self.width - ui_margin_left - ui_margin_right
         height = self.height - ui_margin_top - ui_margin_bottom
         
         return (x, y, width, height)

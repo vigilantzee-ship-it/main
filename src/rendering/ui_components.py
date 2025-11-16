@@ -132,12 +132,13 @@ class UIComponents:
         # Battle end overlay
         if battle.is_over:
             self._render_battle_end(screen, battle)
-        
-        # Controls help (bottom right)
-        self._render_controls_help(screen)
     
     def _render_top_bar(self, screen: pygame.Surface, battle: SpatialBattle):
-        """Render the top information bar."""
+        """
+        Render the top information bar.
+        
+        Displays title, time, and ecosystem stats (Food count, Births, Deaths).
+        """
         screen_width = screen.get_width()
         
         # Semi-transparent background
@@ -152,11 +153,38 @@ class UIComponents:
         title_rect = title_surface.get_rect(center=(screen_width // 2, 25))
         screen.blit(title_surface, title_rect)
         
-        # Battle time
-        time_text = f"Time: {battle.current_time:.1f}s"
-        time_surface = self._get_cached_text(time_text, self.text_font, self.text_color)
-        time_rect = time_surface.get_rect(center=(screen_width // 2, 55))
-        screen.blit(time_surface, time_rect)
+        # Controls hint (centered below title)
+        controls_text = "Click creatures to inspect! | I: Inspector | SPACE: Pause | ESC: Menu"
+        controls_surface = self._get_cached_text(controls_text, self.small_font, (180, 180, 180))
+        controls_rect = controls_surface.get_rect(center=(screen_width // 2, 55))
+        screen.blit(controls_surface, controls_rect)
+        
+        # Ecosystem stats in top right
+        # Count pellets (food)
+        food_count = len(battle.arena.pellets) if hasattr(battle.arena, 'pellets') else 0
+        
+        # Count births and deaths from battle events
+        births = sum(1 for e in battle.events if hasattr(e, 'event_type') and 
+                     str(e.event_type) in ['CREATURE_BIRTH', 'BattleEventType.CREATURE_BIRTH'])
+        deaths = sum(1 for e in battle.events if hasattr(e, 'event_type') and 
+                     str(e.event_type) in ['CREATURE_DEATH', 'BattleEventType.CREATURE_DEATH', 
+                                            'CREATURE_FAINT', 'BattleEventType.CREATURE_FAINT'])
+        
+        # Display stats on the right side
+        stats_x = screen_width - 180
+        stats_y = 15
+        
+        food_text = f"Food: {food_count}"
+        food_surface = self._get_cached_text(food_text, self.text_font, (150, 255, 150))
+        screen.blit(food_surface, (stats_x, stats_y))
+        
+        births_text = f"Births: {births}"
+        births_surface = self._get_cached_text(births_text, self.text_font, (100, 255, 255))
+        screen.blit(births_surface, (stats_x, stats_y + 22))
+        
+        deaths_text = f"Deaths: {deaths}"
+        deaths_surface = self._get_cached_text(deaths_text, self.text_font, (255, 150, 150))
+        screen.blit(deaths_surface, (stats_x, stats_y + 44))
     
     def _render_strain_panel(
         self,
@@ -167,19 +195,25 @@ class UIComponents:
         """
         Render a strain/genetic family panel showing population by strain.
         
+        Panels are positioned in the side margins (outside arena area):
+        - Left panel: GENETIC STRAINS (in 250px left margin)
+        - Right panel: CREATURES (in 250px right margin)
+        
         Args:
             screen: Pygame surface to draw on
             battle: The spatial battle
             is_left: Whether this is the left panel (True) or right (False)
         """
-        panel_width = 220
-        panel_height = 300
-        margin = 10
+        panel_width = 230
+        panel_height = 550
+        margin_from_edge = 10
         
         if is_left:
-            panel_x = margin
+            # Position in left margin area
+            panel_x = margin_from_edge
         else:
-            panel_x = screen.get_width() - panel_width - margin
+            # Position in right margin area
+            panel_x = screen.get_width() - panel_width - margin_from_edge
         
         panel_y = 90
         
@@ -324,10 +358,14 @@ class UIComponents:
                 y_offset += 22
     
     def _render_event_log(self, screen: pygame.Surface):
-        """Render the event log at the bottom."""
+        """
+        Render the event log (Battle Feed) at the bottom.
+        
+        Panel is positioned in the bottom margin (200px reserved area).
+        """
         screen_width = screen.get_width()
-        panel_height = 130
-        panel_y = screen.get_height() - panel_height
+        panel_height = 190
+        panel_y = screen.get_height() - panel_height - 5  # 5px from bottom edge
         
         # Panel background
         panel_surface = pygame.Surface((screen_width, panel_height), pygame.SRCALPHA)
@@ -438,6 +476,8 @@ class UIComponents:
         """
         Render a panel showing pellet population statistics.
         
+        Panel is positioned in the right margin below the CREATURES panel.
+        
         Args:
             screen: Pygame surface to draw on
             battle: The spatial battle containing pellets
@@ -446,13 +486,13 @@ class UIComponents:
         if not pellets:
             return
         
-        panel_width = 220
+        panel_width = 230
         panel_height = 180
-        margin = 10
+        margin_from_edge = 10
         
-        # Position below the right panel
-        panel_x = screen.get_width() - panel_width - margin
-        panel_y = 400
+        # Position in right margin area, below the creatures panel
+        panel_x = screen.get_width() - panel_width - margin_from_edge
+        panel_y = 660  # Below creatures panel (90 + 550 + 20 spacing)
         
         # Panel background
         panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)

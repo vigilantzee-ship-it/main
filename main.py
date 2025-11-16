@@ -474,8 +474,9 @@ def main():
     # Create window with default performance settings
     # Default: 30 FPS for broad hardware compatibility
     # Adjustable at runtime with +/- keys (clamped 10-120)
+    # Larger window (1600x900) to accommodate side panels without overlapping arena
     window = GameWindow(
-        width=1400,
+        width=1600,
         height=900,
         title="EvoBattle - Living World Simulator"
         # fps parameter defaults to 30 in GameWindow.__init__
