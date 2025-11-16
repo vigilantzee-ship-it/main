@@ -83,12 +83,20 @@ class EvolutionPath:
         return f"EvolutionPath({self.from_type} -> {self.to_type} @ Lv{self.min_level})"
 
 
+# DEPRECATED: GeneticsSystem has been superseded by GeneticsEngine (src/models/genetics.py)
+# which provides more advanced Mendelian genetics with dominant/recessive genes.
+# For breeding functionality, use the Breeding system (src/systems/breeding.py) which
+# wraps GeneticsEngine. This class is kept only for backward compatibility.
+
 class GeneticsSystem:
     """
-    Manages genetic inheritance and mutations for breeding.
+    DEPRECATED: Use GeneticsEngine from src.models.genetics instead.
     
-    When two creatures breed, this system determines which traits are
-    inherited, how stats are combined, and whether mutations occur.
+    This is a legacy genetics system maintained for backward compatibility.
+    It provides simple trait inheritance. For advanced Mendelian genetics
+    with dominant/recessive genes, use GeneticsEngine.
+    
+    Manages genetic inheritance and mutations for breeding.
     """
     
     def __init__(self, mutation_rate: float = 0.1):
@@ -98,6 +106,9 @@ class GeneticsSystem:
         Args:
             mutation_rate: Probability of mutations (0.0 to 1.0)
         """
+        from .genetics import GeneticsEngine
+        # Delegate to the advanced genetics engine
+        self._engine = GeneticsEngine(mutation_rate=mutation_rate)
         self.mutation_rate = mutation_rate
     
     def breed(
@@ -117,14 +128,12 @@ class GeneticsSystem:
         Returns:
             New creature offspring
         """
+        # Use the advanced genetics engine for trait combination
+        inherited_traits = self._engine.combine_traits(parent1, parent2, generation=0)
+        inherited_stats = self._engine.combine_stats(parent1, parent2)
+        
         # Determine offspring type (inherit from one parent randomly)
         offspring_type = random.choice([parent1.creature_type, parent2.creature_type])
-        
-        # Calculate inherited stats (average of parents with some variation)
-        inherited_stats = self._inherit_stats(parent1, parent2)
-        
-        # Inherit and possibly mutate traits
-        inherited_traits = self._inherit_traits(parent1, parent2)
         
         # Create offspring at level 1
         offspring = Creature(
@@ -138,96 +147,20 @@ class GeneticsSystem:
         return offspring
     
     def _inherit_stats(self, parent1: Creature, parent2: Creature) -> Stats:
-        """
-        Calculate inherited stats from parents.
-        
-        Args:
-            parent1: First parent
-            parent2: Second parent
-            
-        Returns:
-            Stats for offspring
-        """
-        # Average parents' base stats with some random variation
-        p1_stats = parent1.base_stats
-        p2_stats = parent2.base_stats
-        
-        def average_stat(stat1: int, stat2: int) -> int:
-            """Average two stats with ±10% random variation."""
-            avg = (stat1 + stat2) // 2
-            variation = random.randint(-avg // 10, avg // 10)
-            return max(1, avg + variation)
-        
-        return Stats(
-            max_hp=average_stat(p1_stats.max_hp, p2_stats.max_hp),
-            hp=average_stat(p1_stats.max_hp, p2_stats.max_hp),
-            attack=average_stat(p1_stats.attack, p2_stats.attack),
-            defense=average_stat(p1_stats.defense, p2_stats.defense),
-            speed=average_stat(p1_stats.speed, p2_stats.speed),
-            special_attack=average_stat(p1_stats.special_attack, p2_stats.special_attack),
-            special_defense=average_stat(p1_stats.special_defense, p2_stats.special_defense)
-        )
+        """DEPRECATED: Use GeneticsEngine.combine_stats() instead."""
+        return self._engine.combine_stats(parent1, parent2)
     
     def _inherit_traits(self, parent1: Creature, parent2: Creature) -> List[Trait]:
-        """
-        Determine which traits offspring inherits.
-        
-        Args:
-            parent1: First parent
-            parent2: Second parent
-            
-        Returns:
-            List of inherited traits
-        """
-        inherited = []
-        all_parent_traits = parent1.traits + parent2.traits
-        
-        # Each trait has 50% chance of being inherited
-        for trait in all_parent_traits:
-            if random.random() < 0.5:
-                # Check for mutation
-                if random.random() < self.mutation_rate:
-                    mutated_trait = self._mutate_trait(trait)
-                    inherited.append(mutated_trait)
-                else:
-                    inherited.append(trait)
-        
-        # Remove duplicates (keep first occurrence)
-        seen = set()
-        unique_traits = []
-        for trait in inherited:
-            if trait.name not in seen:
-                seen.add(trait.name)
-                unique_traits.append(trait)
-        
-        return unique_traits
+        """DEPRECATED: Use GeneticsEngine.combine_traits() instead."""
+        return self._engine.combine_traits(parent1, parent2, generation=0)
     
     def _mutate_trait(self, trait: Trait) -> Trait:
-        """
-        Create a mutated version of a trait.
-        
-        Args:
-            trait: Original trait
-            
-        Returns:
-            Mutated trait
-        """
-        # Mutation: slightly adjust modifier values
-        mutation_factor = random.uniform(0.9, 1.1)
-        
-        return Trait(
-            name=f"{trait.name} (Mutated)",
-            description=f"{trait.description} - Mutated variant",
-            trait_type=trait.trait_type,
-            strength_modifier=trait.strength_modifier * mutation_factor,
-            speed_modifier=trait.speed_modifier * mutation_factor,
-            defense_modifier=trait.defense_modifier * mutation_factor,
-            rarity=trait.rarity
-        )
+        """DEPRECATED: Use GeneticsEngine._mutate_trait() instead."""
+        return self._engine._mutate_trait(trait)
     
     def __repr__(self):
         """String representation."""
-        return f"GeneticsSystem(mutation_rate={self.mutation_rate})"
+        return f"GeneticsSystem(mutation_rate={self.mutation_rate}) [DEPRECATED - use GeneticsEngine]"
 
 
 class EvolutionSystem:
