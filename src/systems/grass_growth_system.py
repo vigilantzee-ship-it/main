@@ -117,10 +117,10 @@ class GrassGrowthSystem:
         # Growth pulse state
         self.growth_pulse_active = False
         self.growth_pulse_end_time = 0.0
-        self.growth_pulse_multiplier = 1.3  # 30% boost during pulse
+        self.growth_pulse_multiplier = 1.15  # 15% boost during pulse (reduced from 30%)
         self.last_growth_pulse = time.time()
-        self.growth_pulse_interval = 45.0  # Every 45 seconds
-        self.growth_pulse_duration = 10.0  # Lasts 10 seconds
+        self.growth_pulse_interval = 60.0  # Every 60 seconds (increased from 45)
+        self.growth_pulse_duration = 8.0  # Lasts 8 seconds (reduced from 10)
         
         # Pollination tracking - tracks which pellets creatures have visited
         # Key: creature_id, Value: set of pellet_ids
@@ -145,9 +145,9 @@ class GrassGrowthSystem:
         if not self.enable_nutrient_zones:
             return
         
-        # Create nutrient zone
-        strength = 1.3 + min(0.5, creature_size * 0.2)  # 1.3x to 1.8x boost
-        radius = 12.0 + min(8.0, creature_size * 5.0)  # 12-20 unit radius
+        # Create nutrient zone with more moderate strength
+        strength = 1.15 + min(0.25, creature_size * 0.15)  # 1.15x to 1.4x boost (reduced from 1.3-1.8x)
+        radius = 12.0 + min(6.0, creature_size * 4.0)  # 12-18 unit radius (slightly reduced)
         
         zone = NutrientZone(x, y, strength=strength, radius=radius)
         self.nutrient_zones.append(zone)
@@ -224,8 +224,8 @@ class GrassGrowthSystem:
                             break
             
             if herbivore_count > 0:
-                # Small bonus per nearby herbivore (max 20% boost from 2+ herbivores)
-                bonus = min(0.2, herbivore_count * 0.12)
+                # Small bonus per nearby herbivore (max 12% boost from 2+ herbivores)
+                bonus = min(0.12, herbivore_count * 0.08)  # Reduced from 0.2 max and 0.12 per
                 multiplier *= (1.0 + bonus)
         
         return multiplier
@@ -268,8 +268,8 @@ class GrassGrowthSystem:
         
         # If creature has visited this pellet before, it might spread seeds
         if pellet_id in self.creature_visited_pellets[creature_id]:
-            # 5% chance to pollinate when revisiting
-            if random.random() < 0.05:
+            # 3% chance to pollinate when revisiting (reduced from 5% for balance)
+            if random.random() < 0.03:
                 # Create new pellet nearby (within creature's movement range)
                 angle = random.uniform(0, 2 * math.pi)
                 distance = random.uniform(5.0, 15.0)
