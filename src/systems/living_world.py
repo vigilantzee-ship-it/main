@@ -354,7 +354,8 @@ class LivingWorldBattleEnhancer:
         defender: Creature,
         damage: float,
         was_critical: bool = False,
-        hit: bool = True
+        hit: bool = True,
+        location: Optional[Tuple[float, float]] = None
     ):
         """
         Called when an attack is made.
@@ -365,11 +366,22 @@ class LivingWorldBattleEnhancer:
             damage: Damage dealt
             was_critical: Whether it was a critical hit
             hit: Whether the attack hit
+            location: Where the attack occurred
         """
         if hit:
             # Record in history
             attacker.history.record_attack(defender.creature_id, damage, was_critical)
             defender.history.record_damage_taken(attacker.creature_id, damage)
+            
+            # Record injury in tracker
+            self.on_damage_dealt(
+                attacker=attacker,
+                defender=defender,
+                damage=damage,
+                damage_type="physical",
+                was_critical=was_critical,
+                location=location
+            )
             
             # Update skills
             # Attack difficulty based on defender's defense
@@ -500,3 +512,147 @@ class LivingWorldBattleEnhancer:
             
             # Update relationship decay
             creature.relationships.update_decay()
+    
+    def on_damage_dealt(
+        self,
+        attacker: Creature,
+        defender: Creature,
+        damage: float,
+        damage_type: str = "physical",
+        was_critical: bool = False,
+        location: Optional[Tuple[float, float]] = None
+    ):
+        """
+        Called when damage is dealt to track injuries.
+        
+        Args:
+            attacker: Creature dealing damage
+            defender: Creature receiving damage
+            damage: Amount of damage dealt
+            damage_type: Type of damage (physical, special, starvation, etc.)
+            was_critical: Whether this was a critical hit
+            location: Where the damage occurred
+        """
+        from ..models.injury_tracker import DamageType
+        
+        # Map string to DamageType enum
+        damage_type_map = {
+            'physical': DamageType.PHYSICAL,
+            'special': DamageType.SPECIAL,
+            'starvation': DamageType.STARVATION,
+            'poison': DamageType.POISON,
+            'burning': DamageType.BURNING,
+            'environmental': DamageType.ENVIRONMENTAL
+        }
+        dt = damage_type_map.get(damage_type.lower(), DamageType.PHYSICAL)
+        
+        # Record injury in defender's tracker
+        health_before = defender.stats.hp + damage  # HP before damage was applied
+        health_after = defender.stats.hp
+        
+        defender.injury_tracker.record_injury(
+            attacker_id=attacker.creature_id,
+            attacker_name=attacker.name,
+            damage_type=dt,
+            damage_amount=damage,
+            health_before=health_before,
+            health_after=health_after,
+            was_critical=was_critical,
+            location=location
+        )
+    
+    def on_food_competition(
+        self,
+        pellet_id: str,
+        competitors: List[Creature],
+        winner: Creature,
+        location: Optional[Tuple[float, float]] = None
+    ):
+        """
+        Called when multiple creatures compete for the same food.
+        
+        Args:
+            pellet_id: ID of the contested pellet
+            competitors: List of creatures competing
+            winner: Creature that won the competition
+            location: Where the competition occurred
+        """
+        competitor_ids = [c.creature_id for c in competitors]
+        
+        # Record in each competitor's interaction tracker
+        for creature in competitors:
+            creature.interaction_tracker.record_food_competition(
+                pellet_id=pellet_id,
+                competitors=competitor_ids,
+                winner_id=winner.creature_id,
+                location=location
+            )
+    
+    def on_pellet_targeted(
+        self,
+        pellet,
+        creature: Creature,
+        distance: float = 0.0,
+        location: Optional[Tuple[float, float]] = None
+    ):
+        """
+        Called when a creature targets a pellet.
+        
+        Args:
+            pellet: The pellet being targeted
+            creature: Creature targeting the pellet
+            distance: Distance traveled to target
+            location: Where targeting occurred
+        """
+        if hasattr(pellet, 'history') and pellet.history:
+            pellet.history.record_targeted(
+                creature_id=creature.creature_id,
+                location=location,
+                distance=distance
+            )
+    
+    def on_pellet_avoided(
+        self,
+        pellet,
+        creature: Creature,
+        reason: str = "low palatability",
+        location: Optional[Tuple[float, float]] = None
+    ):
+        """
+        Called when a creature avoids a pellet.
+        
+        Args:
+            pellet: The pellet being avoided
+            creature: Creature avoiding the pellet
+            reason: Why the pellet was avoided
+            location: Where avoidance occurred
+        """
+        if hasattr(pellet, 'history') and pellet.history:
+            pellet.history.record_avoided(
+                creature_id=creature.creature_id,
+                location=location,
+                reason=reason
+            )
+    
+    def on_pellet_eaten(
+        self,
+        pellet,
+        creature: Creature,
+        location: Optional[Tuple[float, float]] = None
+    ):
+        """
+        Called when a creature eats a pellet.
+        
+        Args:
+            pellet: The pellet being eaten
+            creature: Creature eating the pellet
+            location: Where consumption occurred
+        """
+        if hasattr(pellet, 'history') and pellet.history:
+            nutritional_value = pellet.get_nutritional_value()
+            pellet.history.record_eaten(
+                creature_id=creature.creature_id,
+                creature_name=creature.name,
+                location=location,
+                nutritional_value=nutritional_value
+            )

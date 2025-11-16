@@ -15,6 +15,8 @@ from .skills import SkillManager
 from .personality import PersonalityProfile
 from .relationships import RelationshipManager
 from .relationship_metrics import AgentTraits, AgentSocialState
+from .injury_tracker import InjuryTracker
+from .interactions import InteractionTracker
 
 
 class CreatureType:
@@ -201,6 +203,10 @@ class Creature:
         self.skills = SkillManager()
         self.personality = PersonalityProfile.random()
         self.relationships = RelationshipManager(self.creature_id)
+        
+        # Deep Simulation Systems
+        self.injury_tracker = InjuryTracker(self.creature_id, self.stats.max_hp)
+        self.interaction_tracker = InteractionTracker(self.creature_id, self.name)
         
         # Social behavior traits
         self.social_traits = AgentTraits.random()
@@ -629,7 +635,9 @@ class Creature:
             'parent_ids': self.parent_ids,
             'hue': self.hue,
             'strain_id': self.strain_id,
-            'social_traits': self.social_traits.to_dict()
+            'social_traits': self.social_traits.to_dict(),
+            'injury_tracker': self.injury_tracker.to_dict(),
+            'interaction_tracker': self.interaction_tracker.to_dict()
         }
     
     @staticmethod
@@ -680,6 +688,14 @@ class Creature:
         # Restore social traits if present
         if 'social_traits' in data:
             creature.social_traits = AgentTraits.from_dict(data['social_traits'])
+        
+        # Restore injury tracker if present
+        if 'injury_tracker' in data:
+            creature.injury_tracker = InjuryTracker.from_dict(data['injury_tracker'])
+        
+        # Restore interaction tracker if present
+        if 'interaction_tracker' in data:
+            creature.interaction_tracker = InteractionTracker.from_dict(data['interaction_tracker'])
         
         return creature
     

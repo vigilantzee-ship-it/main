@@ -389,6 +389,56 @@ class CreatureInspector:
         
         y += self.section_spacing
         
+        # === Health & Injuries Section ===
+        y = self._render_section_header(content, "Health & Injuries", x_margin, y)
+        
+        tracker = creature.injury_tracker
+        
+        # Overall injury statistics
+        total_damage = tracker.get_total_damage_received()
+        near_deaths = tracker.near_death_count
+        criticals = tracker.critical_hits_received
+        survival_rate = tracker.get_survival_rate()
+        
+        injury_stats = [
+            f"Total Damage Taken: {total_damage:.0f}",
+            f"Near-Death Experiences: {near_deaths}",
+            f"Critical Hits Taken: {criticals}",
+            f"Survival Rate: {survival_rate:.1f}%"
+        ]
+        
+        for line in injury_stats:
+            color = self.warning_color if "Near-Death" in line or "Critical" in line else self.stat_color
+            text = self.text_font.render(line, True, color)
+            content.blit(text, (x_margin + 10, y))
+            y += self.line_height
+        
+        # Most dangerous attacker
+        most_dangerous = tracker.get_most_dangerous_attacker()
+        if most_dangerous:
+            danger_line = f"Most Dangerous Foe: {most_dangerous.attacker_name} ({most_dangerous.total_damage:.0f} dmg)"
+            danger_text = self.small_font.render(danger_line, True, self.warning_color)
+            content.blit(danger_text, (x_margin + 10, y))
+            y += self.line_height
+        
+        # Recent injuries
+        recent_injuries = tracker.get_recent_injuries(3)
+        if recent_injuries:
+            recent_header = self.small_font.render("Recent Injuries:", True, self.text_color)
+            content.blit(recent_header, (x_margin + 10, y))
+            y += self.line_height
+            
+            for injury in recent_injuries:
+                hp_after_pct = injury.health_percentage_after(tracker.max_hp)
+                crit_mark = " [CRIT]" if injury.was_critical else ""
+                injury_line = f"  • {injury.damage_amount:.0f} dmg from {injury.attacker_name}{crit_mark} → {hp_after_pct:.0f}% HP"
+                injury_color = (255, 100, 100) if injury.was_critical else (200, 150, 150)
+                injury_text = self.small_font.render(injury_line, True, injury_color)
+                content.blit(injury_text, (x_margin + 15, y))
+                y += self.line_height - 2
+        
+        y += self.section_spacing
+        
         # === Personality Section ===
         y = self._render_section_header(content, "Personality", x_margin, y)
         
@@ -532,6 +582,48 @@ class CreatureInspector:
                 y += self.line_height
             
             y += self.section_spacing
+        
+        # === Social Interactions Section ===
+        y = self._render_section_header(content, "Social Interactions", x_margin, y)
+        
+        interactions = creature.interaction_tracker
+        summary = interactions.get_interaction_summary()
+        
+        interaction_stats = [
+            f"Total Interactions: {summary['total_interactions']}",
+            f"Food Competitions: {summary['food_competitions']} ({summary['food_competitions_won']}W)",
+            f"Mating Attempts: {summary['mating_attempts']} ({summary['successful_matings']} success)",
+        ]
+        
+        for line in interaction_stats:
+            text = self.text_font.render(line, True, self.stat_color)
+            content.blit(text, (x_margin + 10, y))
+            y += self.line_height
+        
+        # Win rates
+        food_win_rate = interactions.get_food_competition_win_rate() * 100
+        mating_success_rate = interactions.get_mating_success_rate() * 100
+        
+        win_rate_line = f"Competition Win Rate: {food_win_rate:.1f}%"
+        win_text = self.small_font.render(win_rate_line, True, self.success_color if food_win_rate > 50 else self.warning_color)
+        content.blit(win_text, (x_margin + 10, y))
+        y += self.line_height
+        
+        if summary['mating_attempts'] > 0:
+            mating_line = f"Mating Success Rate: {mating_success_rate:.1f}%"
+            mating_text = self.small_font.render(mating_line, True, self.success_color if mating_success_rate > 50 else self.warning_color)
+            content.blit(mating_text, (x_margin + 10, y))
+            y += self.line_height
+        
+        # Most frequent partner
+        frequent_partner = interactions.get_most_frequent_partner()
+        if frequent_partner:
+            partner_line = f"Most Frequent Interaction: {frequent_partner.partner_name}"
+            partner_text = self.small_font.render(partner_line, True, self.highlight_color)
+            content.blit(partner_text, (x_margin + 10, y))
+            y += self.line_height
+        
+        y += self.section_spacing
         
         # === Recent Events Section ===
         y = self._render_section_header(content, "Recent Events", x_margin, y)
