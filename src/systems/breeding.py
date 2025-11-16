@@ -9,6 +9,7 @@ import time
 from ..models.creature import Creature
 from ..models.trait import Trait
 from ..models.stats import Stats
+from ..models.genetics import GeneticsEngine
 
 
 class Breeding:
@@ -40,6 +41,8 @@ class Breeding:
         self.mutation_rate = mutation_rate
         self.trait_inheritance_chance = trait_inheritance_chance
         self.trait_inheritance_rules = {}
+        self.genetics_engine = GeneticsEngine(mutation_rate=mutation_rate)
+        self.generation_counter = 0
     
     def breed(
         self,
@@ -49,6 +52,9 @@ class Breeding:
     ) -> Optional[Creature]:
         """
         Breed two creatures to create offspring.
+        
+        Uses the enhanced genetics engine to properly combine traits
+        from both parents with dominant/recessive gene mechanics.
         
         Args:
             parent1: First parent creature
@@ -62,11 +68,18 @@ class Breeding:
         if not parent1.can_breed() or not parent2.can_breed():
             return None
         
-        # Calculate inherited traits
-        inherited_traits = self.calculate_inherited_traits(parent1, parent2)
+        # Increment generation counter
+        self.generation_counter += 1
         
-        # Inherit stats (average of parents with some variation)
-        child_stats = self._inherit_stats(parent1, parent2)
+        # Calculate inherited traits using new genetics engine
+        inherited_traits = self.genetics_engine.combine_traits(
+            parent1,
+            parent2,
+            generation=self.generation_counter
+        )
+        
+        # Inherit stats using genetics engine (blends both parents)
+        child_stats = self.genetics_engine.combine_stats(parent1, parent2)
         
         # Calculate child hue (average with mutation)
         child_hue = (parent1.hue + parent2.hue) / 2.0
