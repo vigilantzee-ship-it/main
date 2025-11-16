@@ -11,6 +11,7 @@ These documents are the primary references for the game's systems:
 - [BATTLE_SYSTEM_DOCUMENTATION.md](../BATTLE_SYSTEM_DOCUMENTATION.md) - Complete battle system guide
 - [LIVING_WORLD_DOCUMENTATION.md](../LIVING_WORLD_DOCUMENTATION.md) - Creature histories, skills, personalities, relationships
 - [ECOSYSTEM_DOCUMENTATION.md](../ECOSYSTEM_DOCUMENTATION.md) - Hunger, foraging, and survival mechanics
+- [ENVIRONMENTAL_SIMULATION_DOCUMENTATION.md](../ENVIRONMENTAL_SIMULATION_DOCUMENTATION.md) - **NEW!** Weather, terrain, day/night, and hazards
 - [GENETICS_SYSTEM_DOCUMENTATION.md](../GENETICS_SYSTEM_DOCUMENTATION.md) - Genetics and trait inheritance
 - [LINEAGE_SYSTEM_DOCUMENTATION.md](../LINEAGE_SYSTEM_DOCUMENTATION.md) - Genetic strains and evolution
 - [PELLET_SYSTEM_DOCUMENTATION.md](../PELLET_SYSTEM_DOCUMENTATION.md) - Food resource system

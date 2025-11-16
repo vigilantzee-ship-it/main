@@ -60,7 +60,19 @@ A complete survival ecosystem simulation featuring:
 
 See [Ecosystem Documentation](ECOSYSTEM_DOCUMENTATION.md) for details.
 
-### Grass Growth Enhancement System ✓ NEW!
+### Environmental Simulation System ✓ NEW!
+Deep environmental interactions that affect creature survival and behavior:
+- **Dynamic Weather**: 5 weather types (clear, rainy, stormy, foggy, drought) affecting movement, hunger, and resources
+- **Terrain Types**: 6 distinct terrains (grass, rocky, water, forest, desert, marsh) with unique properties
+- **Day/Night Cycle**: 4 time phases (dawn, day, dusk, night) affecting visibility and activity
+- **Environmental Hazards**: 5 hazard types (fire, poison, quicksand, thorns, electrical) with area-of-effect damage
+- **28 Environmental Traits**: Weather adaptation, terrain specialization, time-of-day activity, hazard resistance
+- **Integrated Effects**: Weather impacts hunger (0.8x-1.4x), terrain affects speed (0.3x-1.3x), hazards deal damage
+- **Trait-Based Adaptation**: Creatures with environmental traits get bonuses (Aquatic 2x speed in water, Fire Proof immunity, etc.)
+
+See [Environmental Simulation Documentation](ENVIRONMENTAL_SIMULATION_DOCUMENTATION.md) for details.
+
+### Grass Growth Enhancement System ✓
 Dynamic pellet (food) growth using simulation-based mechanics:
 - **Nutrient Zones**: Pellets grow faster where creatures died (1.05-1.15x boost, lasts 30s)
 - **Pollination**: Creatures spread seeds as they move (3% chance on revisit)
@@ -71,7 +83,7 @@ Dynamic pellet (food) growth using simulation-based mechanics:
 
 See [Grass Growth System Documentation](GRASS_GROWTH_SYSTEM.md) for details.
 
-### Lethal Combat Traits ✓ NEW!
+### Lethal Combat Traits ✓
 High-risk, high-reward combat traits that enable dramatic kills and apex predators:
 - **10 New Offensive Traits**: Berserker, Executioner, Bloodthirsty, Brutal, Assassin, Apex Predator, Reckless Fury, Toxic, Frenzied, Vampiric
 - **Advanced Mechanics**: Bleed, poison, lifesteal, execute, multi-strike, armor penetration
@@ -131,7 +143,8 @@ This project is developed by three specialist agents working in coordination:
 
 **Important Documentation:**
 - [**📚 Complete Documentation Index**](docs/DOCUMENTATION_INDEX.md) - Full guide to all documentation
-- [**Battle Story Mode Documentation**](BATTLE_STORY_MODE_DOCUMENTATION.md) - **NEW!** AI-powered battle narratives
+- [**Environmental Simulation Documentation**](ENVIRONMENTAL_SIMULATION_DOCUMENTATION.md) - **NEW!** Weather, terrain, day/night, and hazards
+- [**Battle Story Mode Documentation**](BATTLE_STORY_MODE_DOCUMENTATION.md) - AI-powered battle narratives
 - [**Living World Documentation**](LIVING_WORLD_DOCUMENTATION.md) - Creature histories, skills, personalities, relationships
 - [Battle System Documentation](BATTLE_SYSTEM_DOCUMENTATION.md) - Complete battle system guide
 - [Core Models Documentation](MODELS_DOCUMENTATION.md) - Creature, stats, and ability systems
@@ -149,7 +162,10 @@ This project is developed by three specialist agents working in coordination:
 All examples should be run from the project root directory using Python's module syntax:
 
 ```bash
-# Battle Story Mode demo (NEW!)
+# Environmental Simulation demo (NEW!)
+python3 -m examples.environmental_demo  # Weather, terrain, day/night effects
+
+# Battle Story Mode demo
 python3 -m examples.battle_story_mode_demo  # AI-powered battle narratives
 
 # Living World demos
