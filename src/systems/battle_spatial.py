@@ -1473,9 +1473,18 @@ class SpatialBattle:
                 
                 # Attempt reproduction with enhanced growth rate
                 CARRYING_CAPACITY = 50  # Max pellets in local area
-                # Apply growth multiplier to reproduction chance (reduced bonus factor from 0.3 to 0.2)
-                base_can_reproduce = pellet.can_reproduce(nearby_count, CARRYING_CAPACITY)
-                if base_can_reproduce or (growth_multiplier > 1.0 and random.random() < (growth_multiplier - 1.0) * 0.2):
+                
+                # Apply growth multiplier by temporarily boosting the pellet's growth rate
+                original_growth_rate = pellet.traits.growth_rate
+                pellet.traits.growth_rate *= growth_multiplier
+                
+                # Check reproduction with boosted rate
+                can_reproduce = pellet.can_reproduce(nearby_count, CARRYING_CAPACITY)
+                
+                # Restore original growth rate
+                pellet.traits.growth_rate = original_growth_rate
+                
+                if can_reproduce:
                     offspring = pellet.reproduce(mutation_rate=0.15)
                     # Clamp offspring position to arena bounds
                     offspring.x = max(0, min(self.arena.width, offspring.x))

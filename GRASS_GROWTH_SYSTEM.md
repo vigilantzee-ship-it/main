@@ -10,9 +10,9 @@ The Grass Growth Enhancement System adds interesting simulation-based mechanics 
 
 **How it works:**
 - Each creature death creates a circular nutrient zone
-- Zone strength scales with creature size (1.15x to 1.4x growth multiplier)
-- Zone radius: 12-18 units
-- Zones last for 60 seconds before fading
+- Zone strength scales with creature size (1.05x to 1.15x growth multiplier)
+- Zone radius: 8-12 units (small, localized effect)
+- Zones last for 30 seconds before fading
 - Multiple zones can overlap for cumulative effects
 
 **Simulation logic:** Dead creatures decompose and enrich the soil, making it better for plant growth.
@@ -35,7 +35,7 @@ The Grass Growth Enhancement System adds interesting simulation-based mechanics 
 **How it works:**
 - Growth pulses occur every 60 seconds
 - Each pulse lasts 8 seconds
-- Provides a 15% growth rate boost (1.15x multiplier)
+- Provides a 10% growth rate boost (1.10x multiplier)
 - Announced in the game log: "Growth pulse! Sunlight and rain boost grass growth!"
 - Stacks with other bonuses
 
@@ -47,9 +47,9 @@ The Grass Growth Enhancement System adds interesting simulation-based mechanics 
 **How it works:**
 - Herbivores are detected by traits (Forager, Herbivore, etc.)
 - Pellets within 15 units of herbivores get a growth boost
-- Bonus scales with number of nearby herbivores (up to 12% boost)
-- 1 herbivore: ~8% boost
-- 2+ herbivores: 12% boost (cap)
+- Bonus scales with number of nearby herbivores (up to 8% boost)
+- 1 herbivore: ~5% boost
+- 2+ herbivores: 8% boost (cap)
 
 **Simulation logic:** Herbivores provide natural fertilization and seed spreading, helping plants grow.
 
@@ -60,12 +60,12 @@ All growth bonuses **multiply together** for powerful synergies:
 | Condition | Multiplier |
 |-----------|-----------|
 | Base (no bonuses) | 1.00x |
-| Nutrient zone only | 1.15-1.4x |
-| Growth pulse only | 1.15x |
-| 2 Herbivores only | 1.12x |
-| **All combined** | **~1.67x** |
+| Nutrient zone only | 1.05-1.15x |
+| Growth pulse only | 1.10x |
+| 2 Herbivores only | 1.08x |
+| **All combined** | **~1.31x** |
 
-Example: A pellet in a nutrient zone, during a growth pulse, with 2 nearby herbivores grows at 167% normal rate!
+Example: A pellet in a nutrient zone, during a growth pulse, with 2 nearby herbivores grows at 131% normal rate!
 
 ## Performance Impact
 
@@ -82,15 +82,16 @@ The system is optimized for 60 FPS gameplay:
 
 The system is carefully balanced to provide more pellets without overpopulation:
 
-- **Short term (3 seconds):** Minimal change (~0 pellets)
-- **Medium term (10 seconds):** +7 pellets (47% growth)
-- **Long term (30 seconds):** +10 pellets (67% growth)
+- **Baseline (no zones, 30s):** +40% growth (15 → 21 pellets)
+- **With nutrient zones (30s):** +100% growth (15 → 30 pellets)
+- **Long term (60s with zones):** Moderate exponential growth
 
 This ensures:
 - ✓ Creatures have enough food
 - ✓ Pellets don't overwhelm the arena
 - ✓ Natural ebb and flow to the ecosystem
 - ✓ Interesting spatial patterns (pellets cluster near death sites)
+- ✓ Nutrient zones fade after 30s to prevent permanent hotspots
 
 ## Integration
 

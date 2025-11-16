@@ -62,12 +62,12 @@ See [Ecosystem Documentation](ECOSYSTEM_DOCUMENTATION.md) for details.
 
 ### Grass Growth Enhancement System ✓ NEW!
 Dynamic pellet (food) growth using simulation-based mechanics:
-- **Nutrient Zones**: Pellets grow faster where creatures died (1.15-1.4x boost)
+- **Nutrient Zones**: Pellets grow faster where creatures died (1.05-1.15x boost, lasts 30s)
 - **Pollination**: Creatures spread seeds as they move (3% chance on revisit)
-- **Growth Pulses**: Periodic environmental boosts (15% boost every 60s)
-- **Symbiotic Bonus**: Herbivores enhance nearby grass growth (up to 12% boost)
+- **Growth Pulses**: Periodic environmental boosts (10% boost every 60s for 8s)
+- **Symbiotic Bonus**: Herbivores enhance nearby grass growth (up to 8% boost)
 - **Spatial Patterns**: Pellets cluster around death sites and herbivore paths
-- **Balanced Growth**: 67% increase over 30s, preventing overpopulation
+- **Balanced Growth**: 100% increase over 30s with zones vs 40% baseline
 
 See [Grass Growth System Documentation](GRASS_GROWTH_SYSTEM.md) for details.
 
