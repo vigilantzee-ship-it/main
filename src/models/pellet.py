@@ -165,24 +165,30 @@ class Pellet:
         
         return random.random() < effective_growth_rate
     
-    def reproduce(self, mutation_rate: float = 0.15) -> 'Pellet':
+    def reproduce(self, mutation_rate: float = 0.15, partner: Optional['Pellet'] = None) -> 'Pellet':
         """
         Create offspring pellet with inherited and mutated traits.
         
+        Supports both asexual (single parent) and sexual (two parents) reproduction.
+        
         Args:
             mutation_rate: Probability and magnitude of trait mutations
+            partner: Optional second parent for sexual reproduction
             
         Returns:
             New Pellet offspring
         """
+        from .genetics import PelletGenetics
+        
         # Offspring spawns near parent within spread_radius
         angle = random.uniform(0, 2 * 3.14159)
         distance = random.uniform(0, self.traits.spread_radius)
         offset_x = distance * random.uniform(-1, 1)
         offset_y = distance * random.uniform(-1, 1)
         
-        # Inherit and mutate traits
-        offspring_traits = self.traits.mutate(mutation_rate)
+        # Use genetics engine for trait inheritance
+        genetics = PelletGenetics(mutation_rate=mutation_rate)
+        offspring_traits = genetics.combine_pellet_traits(self, partner)
         
         return Pellet(
             x=self.x + offset_x,
