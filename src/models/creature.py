@@ -17,6 +17,7 @@ from .relationships import RelationshipManager
 from .relationship_metrics import AgentTraits, AgentSocialState
 from .injury_tracker import InjuryTracker
 from .interactions import InteractionTracker
+from .combat_memory import CombatMemory
 
 
 class CreatureType:
@@ -207,6 +208,9 @@ class Creature:
         # Deep Simulation Systems
         self.injury_tracker = InjuryTracker(self.creature_id, self.stats.max_hp)
         self.interaction_tracker = InteractionTracker(self.creature_id, self.name)
+        
+        # Combat Systems
+        self.combat_memory = CombatMemory(self.creature_id)
         
         # Social behavior traits
         self.social_traits = AgentTraits.random()
@@ -637,7 +641,8 @@ class Creature:
             'strain_id': self.strain_id,
             'social_traits': self.social_traits.to_dict(),
             'injury_tracker': self.injury_tracker.to_dict(),
-            'interaction_tracker': self.interaction_tracker.to_dict()
+            'interaction_tracker': self.interaction_tracker.to_dict(),
+            'combat_memory': self.combat_memory.to_dict()
         }
     
     @staticmethod
@@ -696,6 +701,10 @@ class Creature:
         # Restore interaction tracker if present
         if 'interaction_tracker' in data:
             creature.interaction_tracker = InteractionTracker.from_dict(data['interaction_tracker'])
+        
+        # Restore combat memory if present
+        if 'combat_memory' in data:
+            creature.combat_memory = CombatMemory.from_dict(data['combat_memory'])
         
         return creature
     

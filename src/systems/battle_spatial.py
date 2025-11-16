@@ -4,6 +4,13 @@ Spatial Real-Time Battle System - Handles real-time 2D combat.
 Creatures move and fight in a 2D arena with positioning, proximity-based
 targeting, and continuous time updates. Traits affect behavior, movement,
 and combat decisions.
+
+Enhanced with:
+- Combat memory and threat assessment
+- Relationship-aware targeting (allies, enemies, family, rivals)
+- Personality-driven combat behaviors
+- Configurable combat parameters
+- Cooperative and vengeful tactics
 """
 
 from typing import List, Optional, Dict, Callable, Tuple
@@ -19,6 +26,9 @@ from ..models.stats import StatModifier
 from ..models.spatial import Vector2D, SpatialEntity, Arena
 from ..models.behavior import SpatialBehavior, BehaviorType
 from ..models.pellet import Pellet, create_random_pellet, create_pellet_from_creature
+from ..models.combat_config import CombatConfig
+from ..models.combat_targeting import CombatTargetingSystem, CombatContext, TargetingStrategy
+from ..models.relationships import RelationshipType
 from .breeding import Breeding
 
 
@@ -192,7 +202,8 @@ class SpatialBattle:
         random_seed: Optional[int] = None,
         resource_spawn_rate: float = 0.1,  # Resources per second
         initial_resources: int = 5,
-        living_world_enhancer: Optional['LivingWorldBattleEnhancer'] = None
+        living_world_enhancer: Optional['LivingWorldBattleEnhancer'] = None,
+        combat_config: Optional[CombatConfig] = None
     ):
         """
         Initialize a new spatial battle.
@@ -206,6 +217,7 @@ class SpatialBattle:
             resource_spawn_rate: Number of resources to spawn per second
             initial_resources: Number of resources to spawn at start
             living_world_enhancer: Optional living world enhancer for deep simulation features
+            combat_config: Optional combat configuration (uses defaults if None)
         """
         # Handle backward compatibility - detect old two-team API
         if team2_or_none is not None:
@@ -214,6 +226,9 @@ class SpatialBattle:
         else:
             # New API: single list of creatures
             all_creatures = creatures_or_team1
+        
+        # Combat configuration
+        self.combat_config = combat_config if combat_config else CombatConfig()
         
         self.arena = Arena(arena_width, arena_height)
         self.battle_log: List[str] = []
@@ -489,111 +504,119 @@ class SpatialBattle:
                 else:
                     movement_target = None
         else:
-            # Determine target with hysteresis to prevent rapid retargeting
+            # ENHANCED TARGETING SYSTEM
+            # Determine target using new comprehensive targeting system
             should_retarget = False
             
             if not creature.target or not creature.target.is_alive():
                 should_retarget = True
-            elif self.current_time - creature.last_retarget_time >= creature.min_retarget_time:
-                # Check if current target is too far and there's a closer target
+            elif self.current_time - creature.last_retarget_time >= self.combat_config.retarget_check_interval:
+                # Periodic retarget check
                 current_distance = creature.spatial.distance_to(creature.target.spatial)
-                if current_distance > creature.target_retention_distance:
-                    # Use spatial grid to find nearby creatures efficiently
-                    nearby_creatures = self.creature_grid.query_radius(
-                        creature.spatial.position,
-                        creature.target_retention_distance,
-                        exclude={creature, creature.target}
-                    )
-                    # Only retarget if there's a significantly closer target
-                    if nearby_creatures:
-                        closest = min(
-                            nearby_creatures,
-                            key=lambda c: creature.spatial.distance_to(c.spatial)
-                        )
-                        closest_distance = creature.spatial.distance_to(closest.spatial)
-                        # Only retarget if significantly closer (20% threshold)
-                        if closest_distance < current_distance * 0.8:
-                            should_retarget = True
+                if current_distance > self.combat_config.max_chase_distance:
+                    # Current target too far - must retarget
+                    should_retarget = True
             
             if should_retarget:
-                # Carnivore predator logic: prioritize weak/injured/herbivore targets
-                selected_target = None
-                if creature.creature.has_trait("Carnivore") and other_creatures:
-                    # Use spatial grid to find nearby potential targets
-                    search_radius = 50.0  # Max targeting range for carnivores
-                    nearby_targets = self.creature_grid.query_radius(
-                        creature.spatial.position,
-                        search_radius,
-                        exclude={creature}
+                # Build combat context for targeting decisions
+                hp_percent = creature.creature.stats.hp / max(1, creature.creature.stats.max_hp)
+                
+                # Find nearby allies and enemies
+                nearby_allies_list = self._get_allies(creature, other_creatures, self.combat_config.support_range)
+                nearby_enemies_list = self._get_enemies(creature, other_creatures, self.combat_config.support_range)
+                
+                # Check for injured allies
+                has_injured_allies = any(
+                    ally.creature.stats.hp / max(1, ally.creature.stats.max_hp) < self.combat_config.protect_ally_hp_threshold
+                    for ally in nearby_allies_list
+                )
+                
+                # Check for family nearby
+                has_family_nearby = any(
+                    creature.creature.relationships.has_relationship(
+                        ally.creature.creature_id,
+                        RelationshipType.PARENT
+                    ) or
+                    creature.creature.relationships.has_relationship(
+                        ally.creature.creature_id,
+                        RelationshipType.CHILD
+                    ) or
+                    creature.creature.relationships.has_relationship(
+                        ally.creature.creature_id,
+                        RelationshipType.SIBLING
+                    )
+                    for ally in nearby_allies_list
+                )
+                
+                context = CombatContext(
+                    nearby_allies=len(nearby_allies_list),
+                    nearby_enemies=len(nearby_enemies_list),
+                    self_hp_percent=hp_percent,
+                    is_outnumbered=(len(nearby_enemies_list) > len(nearby_allies_list) + 1),
+                    has_injured_allies=has_injured_allies,
+                    has_family_nearby=has_family_nearby
+                )
+                
+                # Use enhanced targeting system - get all potential targets within range
+                potential_targets = self.creature_grid.query_radius(
+                    creature.spatial.position,
+                    self.combat_config.max_chase_distance,
+                    exclude={creature}
+                )
+                
+                # Filter out allies (don't target family or friends)
+                filtered_targets = []
+                for target in potential_targets:
+                    # Check if ally based on relationships
+                    if self._is_ally(creature, target):
+                        continue  # Skip allies
+                    filtered_targets.append(target)
+                
+                # Select best target using new system
+                if filtered_targets:
+                    selected_target = CombatTargetingSystem.select_target(
+                        creature,
+                        filtered_targets,
+                        context
                     )
                     
-                    if nearby_targets:
-                        # Find weakest/most injured target
-                        def target_priority(target: BattleCreature) -> float:
-                            """Calculate target priority (lower = more desirable)."""
-                            distance = creature.spatial.distance_to(target.spatial)
-                            hp_ratio = target.creature.stats.hp / max(1, target.creature.stats.max_hp)
-                            
-                            # Prioritize injured creatures (low HP ratio)
-                            injury_bonus = (1.0 - hp_ratio) * 30.0
-                            
-                            # Prioritize herbivores (easier prey)
-                            prey_bonus = 20.0 if target.creature.has_trait("Herbivore") else 0.0
-                            
-                            # Prefer closer targets
-                            # Lower score = higher priority
-                            return distance - injury_bonus - prey_bonus
-                        
-                        selected_target = min(nearby_targets, key=target_priority)
-                
-                # Use living world enhancer for personality-driven target selection if available
-                if not selected_target and self.enhancer:
-                    potential_targets = [c.creature for c in other_creatures]
-                    selected_creature = self.enhancer.enhance_target_selection(
-                        creature.creature,
-                        potential_targets
-                    )
-                    if selected_creature:
-                        # Find the corresponding BattleCreature
-                        for other in other_creatures:
-                            if other.creature == selected_creature:
-                                selected_target = other
-                                break
-                
-                # Fall back to default behavior if enhancer didn't select a target
-                if not selected_target:
-                    target_entity = creature.behavior.get_target(
-                        creature.spatial,
-                        [],  # No allies in free-for-all
-                        other_entities,
-                        self.arena.hazards,
-                        self.arena.resources
-                    )
-                    # Find corresponding BattleCreature
-                    if target_entity:
-                        for other in other_creatures:
-                            if other.spatial == target_entity:
-                                selected_target = other
-                                break
-                
-                if selected_target:
-                    creature.target = selected_target
-                    creature.last_retarget_time = self.current_time
+                    if selected_target:
+                        creature.target = selected_target
+                        creature.last_retarget_time = self.current_time
             
-            # Check if creature should retreat based on personality (living world)
+            # Check if creature should flee using new system
             should_flee = False
-            if self.enhancer and creature.target:
-                enemy_count = len([c for c in other_creatures if c.is_alive()])
-                should_flee = self.enhancer.should_retreat(creature.creature, enemy_count)
+            if creature.target:
+                # Build context for flee decision
+                hp_percent = creature.creature.stats.hp / max(1, creature.creature.stats.max_hp)
+                nearby_enemies_count = len(self._get_enemies(creature, other_creatures, self.combat_config.support_range))
+                nearby_allies_count = len(self._get_allies(creature, other_creatures, self.combat_config.support_range))
+                
+                context = CombatContext(
+                    nearby_allies=nearby_allies_count,
+                    nearby_enemies=nearby_enemies_count,
+                    self_hp_percent=hp_percent,
+                    is_outnumbered=(nearby_enemies_count > nearby_allies_count + 1),
+                    has_injured_allies=False,
+                    has_family_nearby=False
+                )
+                
+                should_flee = CombatTargetingSystem.should_flee(creature, context)
             
             # Determine movement
             if should_flee and creature.target:
-                # Move away from target
-                direction = creature.spatial.position - creature.target.spatial.position
-                if direction.magnitude() > 0:
-                    direction = direction.normalized()
-                    flee_distance = 20.0  # Distance to flee
-                    movement_target = creature.spatial.position + (direction * flee_distance)
+                # Flee from enemies
+                enemies_nearby = self._get_enemies(creature, other_creatures, self.combat_config.close_combat_range * 2)
+                if enemies_nearby:
+                    flee_dir = CombatTargetingSystem.get_flee_direction(creature, enemies_nearby)
+                    if flee_dir:
+                        flee_distance = 20.0
+                        movement_target = Vector2D(
+                            creature.spatial.position.x + flee_dir[0] * flee_distance,
+                            creature.spatial.position.y + flee_dir[1] * flee_distance
+                        )
+                    else:
+                        movement_target = None
                 else:
                     movement_target = None
             else:
@@ -701,6 +724,126 @@ class SpatialBattle:
         if creature.target and creature.can_attack(self.current_time):
             self._attempt_attack(creature, creature.target)
     
+    def _is_ally(self, creature: BattleCreature, other: BattleCreature) -> bool:
+        """
+        Determine if two creatures are allies.
+        
+        Allies include:
+        - Family members (parent, child, sibling)
+        - Explicit ally relationships
+        - Same strain (if config enables strain cooperation)
+        
+        Args:
+            creature: First creature
+            other: Second creature
+            
+        Returns:
+            True if they are allies
+        """
+        # Check family relationships
+        if creature.creature.relationships.has_relationship(
+            other.creature.creature_id,
+            RelationshipType.PARENT
+        ):
+            return True
+        
+        if creature.creature.relationships.has_relationship(
+            other.creature.creature_id,
+            RelationshipType.CHILD
+        ):
+            return True
+        
+        if creature.creature.relationships.has_relationship(
+            other.creature.creature_id,
+            RelationshipType.SIBLING
+        ):
+            return True
+        
+        # Check explicit ally relationship
+        if creature.creature.relationships.has_relationship(
+            other.creature.creature_id,
+            RelationshipType.ALLY
+        ):
+            return True
+        
+        # Check strain cooperation (if enabled)
+        if self.combat_config.same_strain_avoid_combat:
+            if creature.creature.strain_id == other.creature.strain_id:
+                return True
+        
+        return False
+    
+    def _get_allies(
+        self,
+        creature: BattleCreature,
+        all_creatures: List[BattleCreature],
+        max_distance: float
+    ) -> List[BattleCreature]:
+        """
+        Get all allies within range.
+        
+        Args:
+            creature: The creature to find allies for
+            all_creatures: All creatures to check
+            max_distance: Maximum distance to consider
+            
+        Returns:
+            List of allied creatures within range
+        """
+        allies = []
+        
+        for other in all_creatures:
+            if other == creature:
+                continue
+            
+            if not other.is_alive():
+                continue
+            
+            # Check if ally
+            if self._is_ally(creature, other):
+                # Check distance
+                distance = creature.spatial.distance_to(other.spatial)
+                if distance <= max_distance:
+                    allies.append(other)
+        
+        return allies
+    
+    def _get_enemies(
+        self,
+        creature: BattleCreature,
+        all_creatures: List[BattleCreature],
+        max_distance: float
+    ) -> List[BattleCreature]:
+        """
+        Get all enemies within range.
+        
+        Args:
+            creature: The creature to find enemies for
+            all_creatures: All creatures to check
+            max_distance: Maximum distance to consider
+            
+        Returns:
+            List of enemy creatures within range
+        """
+        enemies = []
+        
+        for other in all_creatures:
+            if other == creature:
+                continue
+            
+            if not other.is_alive():
+                continue
+            
+            # Not an ally = enemy
+            if not self._is_ally(creature, other):
+                # Check distance
+                distance = creature.spatial.distance_to(other.spatial)
+                if distance <= max_distance:
+                    enemies.append(other)
+        
+        return enemies
+
+    
     def _attempt_attack(self, attacker: BattleCreature, defender: BattleCreature):
         """Attempt an attack from attacker to defender."""
         # Choose ability
@@ -784,9 +927,24 @@ class SpatialBattle:
         # Apply damage or effects
         if ability.ability_type in [AbilityType.PHYSICAL, AbilityType.SPECIAL]:
             damage, was_critical = self._calculate_damage(attacker.creature, defender.creature, ability)
+            
+            # Apply relationship-based damage modifiers
+            damage = self._apply_relationship_damage_modifier(attacker, defender, damage)
+            
             was_alive_before_damage = defender.is_alive()
             actual_damage = defender.creature.stats.take_damage(damage)
             self._log(f"{defender.creature.name} takes {actual_damage} damage! (HP: {defender.creature.stats.hp}/{defender.creature.stats.max_hp})")
+            
+            # Record combat memory for both creatures
+            attacker.creature.combat_memory.record_attacked(
+                defender.creature.creature_id,
+                actual_damage,
+                killed=(was_alive_before_damage and not defender.is_alive())
+            )
+            defender.creature.combat_memory.record_attacked_by(
+                attacker.creature.creature_id,
+                actual_damage
+            )
             
             # Record attack for living world
             if self.enhancer:
@@ -811,6 +969,12 @@ class SpatialBattle:
             # Only count death if creature was alive before this attack
             if was_alive_before_damage and not defender.is_alive():
                 self.death_count += 1
+                
+                # Record kill in combat memory
+                defender.creature.combat_memory.record_killed_by(attacker.creature.creature_id)
+                
+                # Update relationships - family members seek revenge
+                self._handle_revenge_relationships(attacker, defender)
                 
                 # Remove from spatial grid
                 self.creature_grid.remove(defender)
@@ -934,6 +1098,101 @@ class SpatialBattle:
     def _check_accuracy(self, accuracy: int) -> bool:
         """Check if an ability hits."""
         return random.randint(1, 100) <= accuracy
+    
+    def _apply_relationship_damage_modifier(
+        self,
+        attacker: BattleCreature,
+        defender: BattleCreature,
+        base_damage: int
+    ) -> int:
+        """
+        Apply damage modifiers based on relationships and combat context.
+        
+        Args:
+            attacker: The attacking creature
+            defender: The defending creature
+            base_damage: Base damage before modifiers
+            
+        Returns:
+            Modified damage
+        """
+        modifier = 1.0
+        
+        # Check for revenge bonus
+        relationship = attacker.creature.relationships.get_relationship(
+            defender.creature.creature_id
+        )
+        if relationship:
+            if relationship.relationship_type == RelationshipType.REVENGE_TARGET:
+                modifier += self.combat_config.revenge_damage_bonus
+            elif relationship.relationship_type == RelationshipType.RIVAL:
+                modifier += self.combat_config.rival_damage_bonus
+            
+            # Get combat modifier from relationship
+            combat_mod = relationship.get_combat_modifier(fighting_together=False)
+            modifier *= combat_mod
+        
+        # Check for ally support bonus (nearby allies boost damage)
+        allies_nearby = self._get_allies(attacker, self._creatures, self.combat_config.support_range)
+        if len(allies_nearby) >= self.combat_config.gang_up_threshold:
+            # Gang-up bonus
+            gang_bonus = 1.0 + (len(allies_nearby) * self.combat_config.gang_up_damage_bonus)
+            modifier *= gang_bonus
+        elif len(allies_nearby) > 0:
+            # Basic ally support
+            modifier += self.combat_config.ally_support_bonus
+        
+        # Check for family protection bonus (protecting injured family)
+        for ally in allies_nearby:
+            if attacker.creature.relationships.has_relationship(
+                ally.creature.creature_id,
+                RelationshipType.PARENT
+            ) or attacker.creature.relationships.has_relationship(
+                ally.creature.creature_id,
+                RelationshipType.CHILD
+            ) or attacker.creature.relationships.has_relationship(
+                ally.creature.creature_id,
+                RelationshipType.SIBLING
+            ):
+                # Check if family member is injured
+                family_hp_percent = ally.creature.stats.hp / max(1, ally.creature.stats.max_hp)
+                if family_hp_percent < self.combat_config.protect_ally_hp_threshold:
+                    # Fighting to protect injured family
+                    modifier += self.combat_config.family_protection_bonus
+                    break
+        
+        return int(base_damage * modifier)
+    
+    def _handle_revenge_relationships(
+        self,
+        killer: BattleCreature,
+        victim: BattleCreature
+    ):
+        """
+        Handle relationship updates when a creature is killed.
+        
+        Family members of the victim will seek revenge on the killer.
+        
+        Args:
+            killer: The creature who killed
+            victim: The creature who was killed
+        """
+        # Find family members of the victim
+        victim_family = victim.creature.relationships.get_family()
+        
+        for family_rel in victim_family:
+            family_id = family_rel.target_id
+            
+            # Find the family member in the battle
+            for creature in self._creatures:
+                if creature.creature.creature_id == family_id and creature.is_alive():
+                    # Record that killer killed their family member
+                    creature.creature.relationships.record_family_killed(
+                        killer.creature.creature_id,
+                        victim.creature.name
+                    )
+                    break
+
     
     def _handle_corpse_consumption(self, corpse: BattleCreature, killer: BattleCreature):
         """
