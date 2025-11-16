@@ -174,6 +174,22 @@ OMNIVORE = Trait(
     rarity="common"
 )
 
+PICKY_EATER = Trait(
+    name="Picky Eater",
+    description="Only eats high-quality food (palatability >0.6, toxicity <0.2), gets bonus nutrition from quality food, risks starvation if food scarce",
+    trait_type="dietary",
+    defense_modifier=0.95,  # Slightly weaker due to pickiness
+    rarity="uncommon"
+)
+
+INDISCRIMINATE_EATER = Trait(
+    name="Indiscriminate Eater",
+    description="Eats any food (ignores palatability/toxicity), takes less toxicity damage, but has faster hunger depletion",
+    trait_type="dietary",
+    defense_modifier=1.05,  # Hardy constitution
+    rarity="uncommon"
+)
+
 
 # ===========================
 # TRAIT COLLECTIONS
@@ -209,7 +225,9 @@ SURVIVAL_TRAITS = [
 DIETARY_TRAITS = [
     HERBIVORE,
     CARNIVORE,
-    OMNIVORE
+    OMNIVORE,
+    PICKY_EATER,
+    INDISCRIMINATE_EATER
 ]
 
 ALL_ECOSYSTEM_TRAITS = (

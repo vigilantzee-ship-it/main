@@ -17,7 +17,7 @@ from src.models.ability import create_ability
 from src.models.trait import Trait
 from src.models.ecosystem_traits import (
     AGGRESSIVE, CAUTIOUS, FORAGER, EFFICIENT_METABOLISM,
-    CURIOUS, GLUTTON, VORACIOUS, WANDERER
+    CURIOUS, GLUTTON, VORACIOUS, WANDERER, PICKY_EATER, INDISCRIMINATE_EATER
 )
 from src.systems.battle_spatial import SpatialBattle
 from src.systems.living_world import LivingWorldBattleEnhancer
@@ -120,7 +120,7 @@ def create_unified_battle():
         creatures,
         arena_width=120.0,
         arena_height=100.0,
-        resource_spawn_rate=0.15,  # Pellets spawn for foraging
+        resource_spawn_rate=0.06,  # Reduced from 0.15 to 0.06 for better balance
         initial_resources=20  # Starting pellets
     )
     

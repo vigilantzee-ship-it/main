@@ -221,7 +221,7 @@ class SpatialBattle:
         self.breeding_system = Breeding(mutation_rate=0.1, trait_inheritance_chance=0.8)
         self.birth_count: int = 0
         self.death_count: int = 0
-        self.breeding_cooldown: float = 5.0  # Seconds between breeding attempts
+        self.breeding_cooldown: float = 20.0  # Increased from 5.0 to 20.0 seconds for population control
         self.last_breeding_check: float = 0.0
         
         if random_seed is not None:
@@ -428,12 +428,44 @@ class SpatialBattle:
         
         # Determine movement - prioritize food if hungry
         if seeking_food:
-            # Override behavior to seek nearest food
-            nearest_resource = min(
-                self.arena.resources,
-                key=lambda r: creature.spatial.position.distance_to(self.arena.get_resource_position(r))
-            )
-            movement_target = self.arena.get_resource_position(nearest_resource)
+            # Override behavior to seek best available food
+            # Filter resources by whether creature will eat them
+            acceptable_resources = []
+            for r in self.arena.resources:
+                if isinstance(r, Pellet):
+                    if creature.creature.can_eat_pellet(r.traits.toxicity, r.traits.palatability):
+                        acceptable_resources.append(r)
+                else:
+                    acceptable_resources.append(r)  # Legacy resources always acceptable
+            
+            if acceptable_resources:
+                # Choose best food by quality (prefer high palatability, low toxicity)
+                def food_score(resource) -> float:
+                    """Calculate food desirability score (higher = better)."""
+                    distance = creature.spatial.position.distance_to(
+                        self.arena.get_resource_position(resource)
+                    )
+                    if isinstance(resource, Pellet):
+                        # Higher palatability and lower toxicity = better
+                        quality = resource.traits.palatability - resource.traits.toxicity
+                        # Balance quality with distance
+                        return quality * 10.0 - distance * 0.5
+                    else:
+                        # Legacy resource - neutral quality
+                        return 5.0 - distance * 0.5
+                
+                nearest_resource = max(acceptable_resources, key=food_score)
+                movement_target = self.arena.get_resource_position(nearest_resource)
+            else:
+                # No acceptable food, seek any food in desperation
+                if self.arena.resources:
+                    nearest_resource = min(
+                        self.arena.resources,
+                        key=lambda r: creature.spatial.position.distance_to(self.arena.get_resource_position(r))
+                    )
+                    movement_target = self.arena.get_resource_position(nearest_resource)
+                else:
+                    movement_target = None
         else:
             # Determine target with hysteresis to prevent rapid retargeting
             should_retarget = False
@@ -453,9 +485,29 @@ class SpatialBattle:
                             should_retarget = True
             
             if should_retarget:
-                # Use living world enhancer for personality-driven target selection if available
+                # Carnivore predator logic: prioritize weak/injured/herbivore targets
                 selected_target = None
-                if self.enhancer:
+                if creature.creature.has_trait("Carnivore") and other_creatures:
+                    # Find weakest/most injured target
+                    def target_priority(target: BattleCreature) -> float:
+                        """Calculate target priority (lower = more desirable)."""
+                        distance = creature.spatial.distance_to(target.spatial)
+                        hp_ratio = target.creature.stats.hp / max(1, target.creature.stats.max_hp)
+                        
+                        # Prioritize injured creatures (low HP ratio)
+                        injury_bonus = (1.0 - hp_ratio) * 30.0
+                        
+                        # Prioritize herbivores (easier prey)
+                        prey_bonus = 20.0 if target.creature.has_trait("Herbivore") else 0.0
+                        
+                        # Prefer closer targets
+                        # Lower score = higher priority
+                        return distance - injury_bonus - prey_bonus
+                    
+                    selected_target = min(other_creatures, key=target_priority)
+                
+                # Use living world enhancer for personality-driven target selection if available
+                if not selected_target and self.enhancer:
                     potential_targets = [c.creature for c in other_creatures]
                     selected_creature = self.enhancer.enhance_target_selection(
                         creature.creature,
@@ -545,25 +597,55 @@ class SpatialBattle:
             if distance < 2.0:  # Collection range
                 # Check if creature can eat plant resources (herbivore or omnivore)
                 if creature.creature.can_eat_food_type("plant"):
-                    # Get nutritional value (Pellet or default)
+                    # Get nutritional value and quality (Pellet or default)
                     if isinstance(resource, Pellet):
+                        # Check if creature will eat this pellet based on quality
+                        if not creature.creature.can_eat_pellet(
+                            resource.traits.toxicity,
+                            resource.traits.palatability
+                        ):
+                            continue  # Skip this pellet, try next one
+                        
                         food_value = int(resource.get_nutritional_value())
+                        toxicity = resource.traits.toxicity
+                        palatability = resource.traits.palatability
                     else:
-                        food_value = 40  # Default for legacy Vector2D resources
+                        # Legacy Vector2D resources
+                        food_value = 40
+                        toxicity = 0.0
+                        palatability = 0.5
                     
-                    # Eat the resource
-                    hunger_restored = creature.creature.eat(food_value, food_type="plant")
+                    # Eat the resource with quality parameters
+                    hunger_restored = creature.creature.eat(
+                        food_value,
+                        food_type="plant",
+                        toxicity=toxicity,
+                        palatability=palatability
+                    )
                     if hunger_restored > 0:
                         resources_to_remove.append(resource)
-                        self._log(f"{creature.creature.name} ate food and restored {hunger_restored} hunger!")
+                        
+                        # Build message with quality info
+                        quality_msg = ""
+                        if isinstance(resource, Pellet):
+                            if toxicity > 0.3:
+                                quality_msg = " (toxic!)"
+                            elif palatability < 0.4:
+                                quality_msg = " (unpalatable)"
+                            elif palatability > 0.7:
+                                quality_msg = " (tasty!)"
+                        
+                        self._log(f"{creature.creature.name} ate food{quality_msg} and restored {hunger_restored} hunger!")
                         self._emit_event(BattleEvent(
                             event_type=BattleEventType.RESOURCE_COLLECTED,
                             actor=creature,
-                            message=f"{creature.creature.name} ate food! Hunger: {creature.creature.hunger}/{creature.creature.max_hunger}",
+                            message=f"{creature.creature.name} ate food{quality_msg}! Hunger: {creature.creature.hunger}/{creature.creature.max_hunger}",
                             data={
                                 'resource_position': resource_pos.to_tuple(),
                                 'hunger_restored': hunger_restored,
-                                'current_hunger': creature.creature.hunger
+                                'current_hunger': creature.creature.hunger,
+                                'toxicity': toxicity,
+                                'palatability': palatability
                             }
                         ))
                         break  # Only collect one resource per update
