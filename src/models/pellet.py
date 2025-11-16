@@ -10,6 +10,7 @@ from typing import Optional, Tuple, List
 import random
 import uuid
 import time
+import math
 from .pellet_history import PelletLifeHistory
 
 
@@ -181,10 +182,11 @@ class Pellet:
         from .genetics import PelletGenetics
         
         # Offspring spawns near parent within spread_radius
+        # Use polar coordinates to ensure distance constraint is met
         angle = random.uniform(0, 2 * 3.14159)
         distance = random.uniform(0, self.traits.spread_radius)
-        offset_x = distance * random.uniform(-1, 1)
-        offset_y = distance * random.uniform(-1, 1)
+        offset_x = distance * math.cos(angle)
+        offset_y = distance * math.sin(angle)
         
         # Use genetics engine for trait inheritance
         genetics = PelletGenetics(mutation_rate=mutation_rate)
