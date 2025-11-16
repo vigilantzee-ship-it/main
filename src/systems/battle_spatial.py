@@ -788,13 +788,13 @@ class SpatialBattle:
                             creature.last_friendship_check = 0
                             time_since_check = 999  # Force first check
                         
-                        if time_since_check >= 3.0:  # Check every 3 seconds
+                        if time_since_check >= 2.0:  # Check every 2 seconds (increased frequency)
                             creature.last_friendship_check = self.current_time
-                            # Don't form friendship if they're enemies or targeting each other
-                            is_enemy = creature.target == nearby or nearby.target == creature
-                            if not is_enemy and not self._is_ally(creature, nearby):
-                                # Random chance of forming friendship when near peacefully
-                                if random.random() < 0.15:  # 15% chance per check
+                            # Don't form friendship if they're actively targeting each other
+                            actively_fighting = (creature.target == nearby or nearby.target == creature)
+                            if not actively_fighting and not self._is_ally(creature, nearby):
+                                # Higher chance of forming friendship when near peacefully
+                                if random.random() < 0.25:  # 25% chance per check (increased from 15%)
                                     creature.creature.relationships.record_positive_interaction(
                                         nearby.creature.creature_id,
                                         "peaceful_proximity"

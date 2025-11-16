@@ -354,19 +354,19 @@ class RelationshipManager:
         rel = self.get_relationship(other_id)
         if rel:
             # Strengthen existing relationship
-            if rel.relationship_type in [RelationshipType.RIVAL, RelationshipType.FEAR]:
-                # Don't form friendship with rivals/feared creatures
+            if rel.relationship_type in [RelationshipType.RIVAL, RelationshipType.FEAR, RelationshipType.REVENGE_TARGET]:
+                # Don't form friendship with rivals/feared creatures/revenge targets
                 return
-            rel.strengthen(0.03)
+            rel.strengthen(0.04)  # Increased from 0.03 for faster friendship formation
             rel.add_event(interaction_type, "Peaceful interaction")
             
             # Upgrade to friendship if strong enough
-            if rel.relationship_type == RelationshipType.ALLY and rel.strength >= 0.7:
+            if rel.relationship_type == RelationshipType.ALLY and rel.strength >= 0.6:  # Lowered from 0.7
                 rel.relationship_type = RelationshipType.FRIEND
                 rel.add_event("became_friends", "Friendship formed through repeated positive interactions")
         else:
-            # Create new friendship with lower initial strength
-            rel = self.add_relationship(other_id, RelationshipType.FRIEND, strength=0.2)
+            # Create new friendship with moderate initial strength
+            rel = self.add_relationship(other_id, RelationshipType.FRIEND, strength=0.3)  # Increased from 0.2
             rel.add_event(interaction_type, "First positive interaction")
     
     def record_family_killed(self, killer_id: str, family_member_name: str):
