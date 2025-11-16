@@ -9,6 +9,11 @@ from typing import Dict, List, Optional
 from enum import Enum
 from dataclasses import dataclass
 import time
+from .relationship_metrics import (
+    RelationshipMetrics,
+    SharedHistory,
+    update_metrics_after_cooperation
+)
 
 
 class RelationshipType(Enum):
@@ -63,7 +68,8 @@ class Relationship:
         creature_id: str,
         target_id: str,
         relationship_type: RelationshipType,
-        strength: float = 0.5
+        strength: float = 0.5,
+        metrics: Optional[RelationshipMetrics] = None
     ):
         """
         Initialize a relationship.
@@ -73,6 +79,7 @@ class Relationship:
             target_id: ID of the target creature
             relationship_type: Type of relationship
             strength: Relationship strength (0-1)
+            metrics: Optional relationship metrics for cooperative behaviors
         """
         self.creature_id = creature_id
         self.target_id = target_id
@@ -81,6 +88,16 @@ class Relationship:
         self.formed_time: float = time.time()
         self.last_interaction: float = time.time()
         self.events: List[RelationshipEvent] = []
+        
+        # Cooperative behavior metrics
+        self.metrics = metrics if metrics else RelationshipMetrics()
+        self.shared_history = SharedHistory()
+        
+        # Auto-set kinship for family relationships
+        if relationship_type in [RelationshipType.PARENT, RelationshipType.CHILD, RelationshipType.SIBLING]:
+            self.metrics.kinship = 1.0
+            self.metrics.affinity = 0.9
+            self.metrics.trust = 0.9
     
     def add_event(self, event_type: str, description: str):
         """
@@ -97,6 +114,20 @@ class Relationship:
         )
         self.events.append(event)
         self.last_interaction = time.time()
+        
+        # Record in shared history
+        self.shared_history.record_interaction(event_type)
+    
+    def record_cooperative_behavior(self, behavior_type: str):
+        """
+        Record a cooperative behavior and update metrics.
+        
+        Args:
+            behavior_type: Type of cooperative behavior (e.g., "food_shared", "fought_together")
+        """
+        self.shared_history.record_interaction(behavior_type)
+        self.metrics = update_metrics_after_cooperation(self.metrics, behavior_type)
+        self.strengthen(0.02)  # Cooperation strengthens relationship
     
     def strengthen(self, amount: float = 0.1):
         """
@@ -134,6 +165,9 @@ class Relationship:
         # Other relationships decay slowly
         decay_rate = 0.0001  # Very slow decay
         self.strength = max(0.0, self.strength - decay_rate * elapsed_time)
+        
+        # Also decay relationship metrics
+        self.metrics.decay(decay_rate * elapsed_time * 0.01)
     
     def get_combat_modifier(self, fighting_together: bool) -> float:
         """
@@ -184,21 +218,34 @@ class Relationship:
             'strength': self.strength,
             'formed_time': self.formed_time,
             'last_interaction': self.last_interaction,
-            'events': [e.to_dict() for e in self.events]
+            'events': [e.to_dict() for e in self.events],
+            'metrics': self.metrics.to_dict(),
+            'shared_history': self.shared_history.to_dict()
         }
     
     @staticmethod
     def from_dict(data: Dict) -> 'Relationship':
         """Deserialize from dictionary."""
+        # Handle metrics if present (for backward compatibility)
+        metrics = None
+        if 'metrics' in data:
+            metrics = RelationshipMetrics.from_dict(data['metrics'])
+        
         rel = Relationship(
             creature_id=data['creature_id'],
             target_id=data['target_id'],
             relationship_type=RelationshipType(data['relationship_type']),
-            strength=data['strength']
+            strength=data['strength'],
+            metrics=metrics
         )
         rel.formed_time = data['formed_time']
         rel.last_interaction = data['last_interaction']
         rel.events = [RelationshipEvent.from_dict(e) for e in data['events']]
+        
+        # Handle shared history if present
+        if 'shared_history' in data:
+            rel.shared_history = SharedHistory.from_dict(data['shared_history'])
+        
         return rel
 
 

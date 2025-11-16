@@ -14,6 +14,7 @@ from .history import CreatureHistory
 from .skills import SkillManager
 from .personality import PersonalityProfile
 from .relationships import RelationshipManager
+from .relationship_metrics import AgentTraits, AgentSocialState
 
 
 class CreatureType:
@@ -200,6 +201,10 @@ class Creature:
         self.skills = SkillManager()
         self.personality = PersonalityProfile.random()
         self.relationships = RelationshipManager(self.creature_id)
+        
+        # Social behavior traits
+        self.social_traits = AgentTraits.random()
+        self.social_state = AgentSocialState()
         
         # Recalculate stats with trait modifiers applied
         if self.traits:
@@ -623,7 +628,8 @@ class Creature:
             'mature': self.mature,
             'parent_ids': self.parent_ids,
             'hue': self.hue,
-            'strain_id': self.strain_id
+            'strain_id': self.strain_id,
+            'social_traits': self.social_traits.to_dict()
         }
     
     @staticmethod
@@ -670,6 +676,11 @@ class Creature:
             creature.active_modifiers.append(StatModifier.from_dict(mod_data))
         
         creature.stats = creature.get_effective_stats()
+        
+        # Restore social traits if present
+        if 'social_traits' in data:
+            creature.social_traits = AgentTraits.from_dict(data['social_traits'])
+        
         return creature
     
     def __repr__(self):

@@ -169,6 +169,15 @@ Tracks social bonds between creatures, affecting behavior and creating narrative
 - `FEAR` - Intimidated by opponent
 - `REVENGE_TARGET` - Killed family member (seek vengeance)
 
+#### Relationship Metrics
+
+Each relationship now tracks detailed metrics for cooperative behavior:
+
+- **Affinity** (0-1): Emotional bond strength, affects cooperation willingness
+- **Trust** (0-1): Reliability, affects food sharing and teamwork
+- **Kinship** (0-1): Genetic relatedness (1.0 for family, never decays)
+- **Rank** (-1 to 1): Relative dominance (positive if this creature is dominant)
+
 #### Relationship Effects
 
 **Combat Modifiers:**
@@ -176,6 +185,13 @@ Tracks social bonds between creatures, affecting behavior and creating narrative
 - Fighting revenge target: Up to +30% damage
 - Fighting rival: Up to +15% damage
 - Fighting feared opponent: Up to -20% damage
+
+**Cooperative Behaviors** (new):
+- Food sharing based on kinship, altruism, and trust
+- Joining allies' fights based on loyalty and relationship strength
+- Following alpha based on dominance hierarchy
+- Group combat bonuses for coordinated fighting
+- Parental care behaviors
 
 #### Usage Example
 
@@ -194,6 +210,121 @@ manager.record_family_killed(killer_id, "Parent")
 allies = manager.get_allies()
 revenge_targets = manager.get_revenge_targets()
 family = manager.get_family()
+
+# Access relationship metrics
+rel = manager.get_relationship(ally_id)
+cooperation_score = rel.metrics.get_cooperation_score()
+print(f"Cooperation likelihood: {cooperation_score:.2f}")
+```
+
+### 5. Social Traits System (`src/models/relationship_metrics.py`)
+
+Creatures now have inherited social traits that drive cooperative behaviors.
+
+#### Social Traits
+
+- **Altruism** (0-1): Willingness to help others, share food
+  - High: Shares food freely, helps wounded allies
+  - Low: Selfish, keeps resources for self
+  
+- **Dominance** (0-1): Leadership and alpha tendencies
+  - High: Seeks to lead pack, expects others to follow
+  - Low: Submissive, follows strong leaders
+  
+- **Cooperation** (0-1): Teamwork preference
+  - High: Fights better in groups, coordinates well
+  - Low: Independent fighter, reduced group bonuses
+  
+- **Protectiveness** (0-1): Family/pack protection drive
+  - High: Prioritizes protecting family/pack members
+  - Low: Self-preservation focus
+  
+- **Independence** (0-1): Solo vs group preference
+  - High: Prefers solo action, less likely to join fights
+  - Low: Seeks group activities, pack behavior
+
+#### Trait Inheritance
+
+```python
+from src.models.relationship_metrics import AgentTraits
+
+# Parents' traits
+parent1_traits = creature1.social_traits
+parent2_traits = creature2.social_traits
+
+# Child inherits with mutation
+child_traits = AgentTraits.inherit(parent1_traits, parent2_traits, mutation_rate=0.1)
+
+# Get description
+print(child_traits.get_description())  # e.g., "altruistic, cooperative, protective"
+```
+
+### 6. Cooperative Behavior System (`src/models/relationship_metrics.py`)
+
+Evaluates and executes cooperative behaviors based on traits and relationships.
+
+#### Available Behaviors
+
+**1. Food Sharing**
+```python
+from src.models.relationship_metrics import CooperativeBehaviorSystem, DecisionContext
+
+system = CooperativeBehaviorSystem()
+
+context = DecisionContext(
+    actor_id=giver.creature_id,
+    target_id=receiver.creature_id,
+    actor_traits=giver.social_traits,
+    target_traits=receiver.social_traits,
+    metrics=relationship.metrics,
+    actor_state=giver.social_state,
+    target_state=receiver.social_state
+)
+
+should_share, amount = system.evaluate_food_sharing(context, food_amount=100.0)
+if should_share:
+    receiver.eat(amount)
+    giver.hunger -= amount
+```
+
+**2. Joining Fights**
+```python
+should_join, commitment = system.evaluate_join_fight(context, threat_level=0.5)
+if should_join:
+    # Ally joins the fight
+    # commitment (0-1) affects how hard they fight
+    damage_bonus = 1.0 + (commitment * 0.3)
+```
+
+**3. Group Combat Bonuses**
+```python
+# Count allies and family in battle
+allies_count = len([c for c in creatures if c.strain_id == creature.strain_id])
+family_count = len([c for c in creatures if is_family(creature, c)])
+
+# Calculate group bonus
+bonus = system.calculate_group_combat_bonus(
+    creature.social_traits,
+    allies_count,
+    family_count
+)
+damage *= bonus  # Up to +35% for cooperative fighters in large groups
+```
+
+**4. Following Alpha**
+```python
+should_follow, loyalty = system.evaluate_follow_alpha(context)
+if should_follow:
+    # Creature follows alpha's lead
+    # loyalty (0-1) affects obedience
+```
+
+**5. Parental Care**
+```python
+should_care, intensity = system.evaluate_parental_care(context, offspring_need=0.8)
+if should_care:
+    # Parent provides care (food, protection, etc.)
+    care_amount = base_care * intensity
 ```
 
 ## Battle Integration
@@ -224,6 +355,13 @@ The `LivingWorldBattleEnhancer` (`src/systems/living_world.py`) seamlessly integ
    - Rivalry bonuses
    - Fear penalties
 
+5. **Cooperative Behaviors** (NEW)
+   - Food sharing between allies/family
+   - Joining allies' fights
+   - Group combat bonuses
+   - Social state tracking (hunger, health, pack status)
+   - Cooperative action recording
+
 ### Usage Example
 
 ```python
@@ -232,13 +370,24 @@ from src.systems.living_world import LivingWorldBattleEnhancer
 # Create enhancer
 enhancer = LivingWorldBattleEnhancer(battle_system)
 
-# Start battle
+# Start battle - updates social states
 enhancer.on_battle_start(creatures)
+enhancer.update_social_states(creatures)
 
 # During combat
 target = enhancer.enhance_target_selection(attacker, potential_targets)
 should_flee = enhancer.should_retreat(creature, enemy_count)
-final_damage = enhancer.calculate_damage_modifier(attacker, defender, base_damage)
+
+# Evaluate cooperative behaviors
+should_share, amount = enhancer.evaluate_food_sharing(giver, receiver, food_amount)
+should_join, commitment = enhancer.evaluate_join_fight(ally, fighter, threat_level)
+
+# Calculate damage with all modifiers (including group bonuses)
+final_damage = enhancer.calculate_damage_modifier(
+    attacker, defender, base_damage,
+    is_critical=False,
+    allies_present=allies_list
+)
 
 # After combat
 enhancer.on_creature_killed(killer, victim, location)
@@ -253,11 +402,14 @@ Interactive Pygame panel for viewing detailed creature information (`src/renderi
 
 - **Stats & Status**: HP, energy, hunger, current state
 - **Personality**: Full personality profile and combat style
+- **Social Traits** (NEW): Altruism, dominance, cooperation, protectiveness, independence
 - **Skills**: Top skills with proficiency levels
 - **Battle Record**: Win/loss record, K/D ratio, damage stats
 - **Achievements**: Unlocked achievements with rarity
 - **Titles**: Earned honorifics
 - **Relationships**: Family, allies, rivals, revenge targets
+  - **Cooperation Scores** (NEW): Shows cooperation likelihood for each relationship
+  - **Relationship Metrics** (NEW): Displays affinity, trust values
 - **Event Timeline**: Recent life events
 
 ### Usage Example
