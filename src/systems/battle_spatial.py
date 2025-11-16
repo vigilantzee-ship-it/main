@@ -1085,7 +1085,8 @@ class SpatialBattle:
         # Apply living world dodge chance
         if hit and self.enhancer:
             dodge_chance = self.enhancer.calculate_dodge_chance_modifier(defender.creature)
-            if random.random() < dodge_chance:
+            # Convert percentage to probability (0-100 -> 0.0-1.0)
+            if random.random() < (dodge_chance / 100.0):
                 hit = False
         
         if not hit:

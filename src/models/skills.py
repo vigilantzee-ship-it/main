@@ -241,10 +241,10 @@ class Skill:
         Get bonus to success chance (e.g., dodge chance, crit chance).
         
         Returns:
-            Bonus percentage (0-50%)
+            Bonus percentage (0-15%)
         """
-        # Scale from 0% at level 0 to 50% at level 100
-        return self.level * 0.5
+        # Scale from 0% at level 0 to 15% at level 100
+        return self.level * 0.15
     
     def to_dict(self) -> Dict:
         """Serialize to dictionary."""
