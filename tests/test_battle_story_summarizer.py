@@ -117,7 +117,7 @@ class TestBattleStoryGenerator(unittest.TestCase):
         self.assertTrue(len(metrics.key_moments) > 0)
     
     def test_generate_fallback_story(self):
-        """Test fallback story generation without AI."""
+        """Test story generation using local processing."""
         self.generator.start_collection()
         
         # Add some events and logs
@@ -128,12 +128,14 @@ class TestBattleStoryGenerator(unittest.TestCase):
         self.generator.add_log("Fierce combat ensued")
         
         # Generate story
-        story = self.generator._build_fallback_story(StoryTone.DRAMATIC)
+        story = self.generator.generate_story(tone=StoryTone.DRAMATIC)
         
         self.assertIsInstance(story, str)
         self.assertGreater(len(story), 0)
-        self.assertIn("Battle Statistics", story)
-        self.assertIn("Total Attacks", story)
+        self.assertIn("Battle Summary", story)
+        # Check for key content
+        self.assertIn("attacks", story.lower())
+        self.assertIn("damage", story.lower())
     
     def test_generate_story_different_tones(self):
         """Test story generation with different tones."""

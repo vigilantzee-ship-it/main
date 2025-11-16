@@ -15,7 +15,7 @@ from .creature_inspector import CreatureInspector
 from .pellet_inspector import PelletInspector
 from .pause_menu import PauseMenu, PauseMenuAction
 from .post_game_summary import PostGameSummary
-from .trait_dashboard import TraitDashboard
+from .trait_dashboard import TraitAnalyticsDashboard
 from .story_viewer import StoryViewer, StoryViewerAction
 
 __all__ = [
@@ -30,7 +30,7 @@ __all__ = [
     'PauseMenu',
     'PauseMenuAction',
     'PostGameSummary',
-    'TraitDashboard',
+    'TraitAnalyticsDashboard',
     'StoryViewer',
     'StoryViewerAction',
 ]

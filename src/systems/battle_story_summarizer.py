@@ -1,8 +1,9 @@
 """
-Battle Story Summarizer - AI-powered battle narrative generation.
+Battle Story Summarizer - Local battle narrative generation.
 
-This module uses AI to generate engaging story summaries from battle logs,
-capturing key events, MVP creatures, alliances, betrayals, and dramatic moments.
+This module generates engaging story summaries from battle logs using
+local text processing (no API calls required), capturing key events,
+MVP creatures, alliances, betrayals, and dramatic moments.
 """
 
 from typing import List, Optional, Dict, Any
@@ -10,13 +11,7 @@ import time
 from enum import Enum
 from dataclasses import dataclass, field
 import os
-
-# Optional OpenAI import - system works without it but won't generate AI stories
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
+import random
 
 
 class StoryTone(Enum):
@@ -47,41 +42,32 @@ class BattleStoryMetrics:
 
 class BattleStoryGenerator:
     """
-    Generates AI-powered story summaries from battle events and logs.
+    Generates engaging story summaries from battle events and logs.
     
-    Collects battle events over a time window and produces engaging narratives
-    highlighting key moments, heroes, villains, and turning points.
+    Uses local text processing and templates to create narratives
+    without requiring external API calls. Completely free to use.
     """
     
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        model: str = "gpt-4o-mini",
         default_tone: StoryTone = StoryTone.DRAMATIC
     ):
         """
         Initialize the battle story generator.
         
         Args:
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
-            model: OpenAI model to use for generation
             default_tone: Default narrative tone
         """
         self.default_tone = default_tone
-        self.model = model
-        
-        # Initialize OpenAI client if available
-        self.client = None
-        if OPENAI_AVAILABLE:
-            api_key = api_key or os.getenv('OPENAI_API_KEY')
-            if api_key:
-                self.client = OpenAI(api_key=api_key)
         
         # Event collection
         self.collected_events: List[Any] = []
         self.battle_logs: List[str] = []
         self.start_time: Optional[float] = None
         self.metrics = BattleStoryMetrics()
+        
+        # Track creature statistics
+        self.creature_stats: Dict[str, Dict[str, Any]] = {}
     
     def start_collection(self):
         """Start collecting battle events for story generation."""
@@ -98,17 +84,48 @@ class BattleStoryGenerator:
         if hasattr(event, 'event_type'):
             event_type = str(event.event_type.value) if hasattr(event.event_type, 'value') else str(event.event_type)
             
+            # Track creature-specific stats
+            if hasattr(event, 'actor') and event.actor:
+                actor_name = event.actor.creature.name if hasattr(event.actor, 'creature') else str(event.actor)
+                if actor_name not in self.creature_stats:
+                    self.creature_stats[actor_name] = {
+                        'attacks': 0, 'damage': 0, 'kills': 0, 'deaths': 0, 'crits': 0
+                    }
+            
             if event_type == 'ability_use':
                 self.metrics.total_attacks += 1
+                if hasattr(event, 'actor') and event.actor:
+                    actor_name = event.actor.creature.name if hasattr(event.actor, 'creature') else str(event.actor)
+                    self.creature_stats[actor_name]['attacks'] += 1
+                    
             elif event_type == 'damage_dealt':
                 if hasattr(event, 'value') and event.value:
                     self.metrics.total_damage_dealt += event.value
+                    if hasattr(event, 'actor') and event.actor:
+                        actor_name = event.actor.creature.name if hasattr(event.actor, 'creature') else str(event.actor)
+                        self.creature_stats[actor_name]['damage'] += event.value
+                        
             elif event_type == 'critical_hit':
                 self.metrics.critical_hits += 1
+                if hasattr(event, 'actor') and event.actor:
+                    actor_name = event.actor.creature.name if hasattr(event.actor, 'creature') else str(event.actor)
+                    self.creature_stats[actor_name]['crits'] += 1
+                    
             elif event_type in ['creature_death', 'creature_faint']:
                 self.metrics.total_kills += 1
                 if hasattr(event, 'message'):
                     self.metrics.dramatic_events.append(event.message)
+                if hasattr(event, 'target') and event.target:
+                    target_name = event.target.creature.name if hasattr(event.target, 'creature') else str(event.target)
+                    if target_name not in self.creature_stats:
+                        self.creature_stats[target_name] = {
+                            'attacks': 0, 'damage': 0, 'kills': 0, 'deaths': 0, 'crits': 0
+                        }
+                    self.creature_stats[target_name]['deaths'] += 1
+                if hasattr(event, 'actor') and event.actor:
+                    actor_name = event.actor.creature.name if hasattr(event.actor, 'creature') else str(event.actor)
+                    self.creature_stats[actor_name]['kills'] += 1
+                    
             elif event_type == 'creature_birth':
                 self.metrics.total_births += 1
                 if hasattr(event, 'message'):
@@ -157,144 +174,145 @@ class BattleStoryGenerator:
         else:
             story_lines.append("⚡ BATTLE STORY ⚡\n")
         
-        # Duration
+    def _get_mvp_creatures(self) -> List[Dict[str, Any]]:
+        """Identify MVP creatures based on performance."""
+        mvps = []
+        
+        for name, stats in self.creature_stats.items():
+            score = stats['damage'] * 1.0 + stats['kills'] * 50 + stats['crits'] * 10
+            if score > 0:
+                mvps.append({
+                    'name': name,
+                    'score': score,
+                    'damage': stats['damage'],
+                    'kills': stats['kills'],
+                    'crits': stats['crits'],
+                    'deaths': stats['deaths']
+                })
+        
+        # Sort by score
+        mvps.sort(key=lambda x: x['score'], reverse=True)
+        return mvps[:3]  # Top 3
+    
+    def _build_narrative_story(self, tone: StoryTone) -> str:
+        """Build an engaging narrative story using local text generation."""
+        metrics = self._extract_metrics_from_logs()
+        mvps = self._get_mvp_creatures()
+        
+        # Story templates by tone
+        story_parts = []
+        
+        # === OPENING ===
         duration_min = int(metrics.duration_seconds // 60)
         duration_sec = int(metrics.duration_seconds % 60)
-        story_lines.append(f"Duration: {duration_min}m {duration_sec}s\n")
         
-        # Statistics
-        story_lines.append(f"\n📈 Battle Statistics:")
-        story_lines.append(f"  • Total Attacks: {metrics.total_attacks}")
-        story_lines.append(f"  • Critical Hits: {metrics.critical_hits}")
-        story_lines.append(f"  • Total Damage: {metrics.total_damage_dealt:.1f}")
-        story_lines.append(f"  • Casualties: {metrics.total_kills}")
-        story_lines.append(f"  • Births: {metrics.total_births}")
-        story_lines.append(f"  • Resources Collected: {metrics.resource_collections}")
-        
-        # Key moments
-        if metrics.key_moments:
-            story_lines.append(f"\n🌟 Key Moments:")
-            for moment in metrics.key_moments[:5]:
-                story_lines.append(f"  • {moment}")
-        
-        # Dramatic events
-        if metrics.dramatic_events:
-            story_lines.append(f"\n💥 Dramatic Events:")
-            for event in metrics.dramatic_events[:5]:
-                story_lines.append(f"  • {event}")
-        
-        # Sample battle logs
-        if self.battle_logs:
-            story_lines.append(f"\n📜 Battle Log Highlights (last 10 events):")
-            for log in self.battle_logs[-10:]:
-                story_lines.append(f"  {log}")
-        
-        return "\n".join(story_lines)
-    
-    def _build_ai_prompt(self, tone: StoryTone) -> str:
-        """Build the AI prompt for story generation."""
-        metrics = self._extract_metrics_from_logs()
-        
-        # Tone-specific instructions
-        tone_instructions = {
-            StoryTone.SERIOUS: "Write a serious, gritty battle report that captures the brutal reality of combat.",
-            StoryTone.HEROIC: "Write an epic, heroic tale celebrating bravery, valor, and legendary feats.",
-            StoryTone.COMEDIC: "Write a humorous, lighthearted account that finds comedy in the chaos.",
-            StoryTone.DRAMATIC: "Write a dramatic narrative with tension, twists, and emotional weight.",
-            StoryTone.DOCUMENTARY: "Write a factual, analytical report in the style of a nature documentary."
+        openings = {
+            StoryTone.HEROIC: [
+                f"⚔️ **LEGENDS OF THE ARENA** ⚔️\n\nIn an epic clash spanning {duration_min} minutes and {duration_sec} seconds, warriors of renown gathered to test their mettle in glorious combat.",
+                f"⚔️ **TALES OF VALOR** ⚔️\n\nFrom across the realm they came, {self.metrics.creatures_started} brave souls seeking honor and glory in {duration_min} minutes of legendary battle.",
+            ],
+            StoryTone.DRAMATIC: [
+                f"⚡ **THE ARENA REMEMBERS** ⚡\n\nBlood and steel met in a {duration_min}-minute battle that would echo through eternity. What transpired would change these warriors forever.",
+                f"⚡ **SHADOWS OF CONFLICT** ⚡\n\nIn {duration_min} minutes and {duration_sec} seconds, the arena bore witness to a struggle that pushed warriors to their breaking points.",
+            ],
+            StoryTone.COMEDIC: [
+                f"🎭 **CHAOS IN THE ARENA** 🎭\n\nWell, this was supposed to be an organized battle. It lasted {duration_min} minutes, but calling it 'organized' might be generous.",
+                f"🎭 **THE HILARIOUS CHRONICLES** 🎭\n\nFor {duration_min} gloriously chaotic minutes, our 'warriors' demonstrated that sometimes enthusiasm outpaces skill.",
+            ],
+            StoryTone.SERIOUS: [
+                f"📋 **COMBAT REPORT** 📋\n\nEngagement duration: {duration_min}m {duration_sec}s. Combatants: {self.metrics.creatures_started}. Analysis follows.",
+                f"📋 **BATTLEFIELD ANALYSIS** 📋\n\nCombat initiated. Duration: {duration_min} minutes, {duration_sec} seconds. Participant count: {self.metrics.creatures_started}.",
+            ],
+            StoryTone.DOCUMENTARY: [
+                f"📊 **ARENA ECOLOGY STUDY** 📊\n\nHere in their natural habitat, we observe {self.metrics.creatures_started} specimens engaging in territorial combat over a {duration_min}-minute period.",
+                f"📊 **BEHAVIORAL OBSERVATION** 📊\n\nField study: {duration_min} minutes. Subjects: {self.metrics.creatures_started} individuals. Environmental stress: extreme.",
+            ],
         }
         
-        prompt = f"""You are a master storyteller tasked with creating an engaging battle narrative.
-
-{tone_instructions.get(tone, tone_instructions[StoryTone.DRAMATIC])}
-
-Battle Statistics:
-- Duration: {metrics.duration_seconds:.0f} seconds ({metrics.duration_seconds/60:.1f} minutes)
-- Total Attacks: {metrics.total_attacks}
-- Critical Hits: {metrics.critical_hits}
-- Total Damage Dealt: {metrics.total_damage_dealt:.1f}
-- Casualties: {metrics.total_kills}
-- New Births: {metrics.total_births}
-- Resources Collected: {metrics.resource_collections}
-
-Key Moments:
-{chr(10).join(f'- {moment}' for moment in metrics.key_moments[:10]) if metrics.key_moments else '(None recorded)'}
-
-Dramatic Events:
-{chr(10).join(f'- {event}' for event in metrics.dramatic_events[:10]) if metrics.dramatic_events else '(None recorded)'}
-
-Recent Battle Log (last 30 entries):
-{chr(10).join(self.battle_logs[-30:]) if self.battle_logs else '(No logs available)'}
-
-Create a compelling 150-250 word story that:
-1. Captures the essence of the battle
-2. Highlights MVP creatures and memorable moments
-3. Describes turning points and dramatic shifts
-4. Mentions notable alliances, betrayals, or rivalries if present
-5. Ends with a sense of resolution or anticipation
-
-Keep it engaging, vivid, and match the requested tone. Make readers feel like they witnessed something memorable."""
+        story_parts.append(random.choice(openings.get(tone, openings[StoryTone.DRAMATIC])))
         
-        return prompt
+        # === BATTLE STATISTICS NARRATIVE ===
+        if metrics.total_attacks > 0:
+            stats_narrative = {
+                StoryTone.HEROIC: f"\n\nThe warriors clashed {metrics.total_attacks} times, their mighty blows dealing {metrics.total_damage_dealt:.0f} damage total. {metrics.critical_hits} strikes found critical weaknesses, each one a testament to skill and fortune.",
+                StoryTone.DRAMATIC: f"\n\nThrough {metrics.total_attacks} brutal exchanges, {metrics.total_damage_dealt:.0f} points of damage painted the arena red. {metrics.critical_hits} critical strikes changed the course of battle in an instant.",
+                StoryTone.COMEDIC: f"\n\nOur 'fighters' swung wildly {metrics.total_attacks} times, somehow managing {metrics.total_damage_dealt:.0f} damage (most of it accidental). {metrics.critical_hits} hits were actually intentional!",
+                StoryTone.SERIOUS: f"\n\nEngagement count: {metrics.total_attacks}. Total damage output: {metrics.total_damage_dealt:.0f}. Critical hits recorded: {metrics.critical_hits}.",
+                StoryTone.DOCUMENTARY: f"\n\nAggression displays numbered {metrics.total_attacks}, with cumulative damage reaching {metrics.total_damage_dealt:.0f} units. Precision strikes: {metrics.critical_hits}.",
+            }
+            story_parts.append(stats_narrative.get(tone, stats_narrative[StoryTone.DRAMATIC]))
+        
+        # === MVP SECTION ===
+        if mvps:
+            mvp = mvps[0]
+            # Prepare comedic text without nested quotes
+            comedic_skill = "Beginner's luck, surely!" if mvp['crits'] < 2 else "They might actually know what they're doing!"
+            
+            mvp_narrative = {
+                StoryTone.HEROIC: f"\n\n**HERO OF THE HOUR**: {mvp['name']} emerged as the champion, their blade singing through the arena with {mvp['damage']:.0f} damage dealt and {mvp['kills']} foes vanquished. {'A true legend in the making!' if mvp['crits'] > 2 else 'Their prowess was unmatched.'}",
+                StoryTone.DRAMATIC: f"\n\nAmidst the chaos, one name rose above all others: **{mvp['name']}**. {mvp['damage']:.0f} damage. {mvp['kills']} kills. {mvp['crits']} critical strikes. Their story would not be forgotten.",
+                StoryTone.COMEDIC: f"\n\n**MVP (Most Violent Participant)**: {mvp['name']} somehow managed {mvp['damage']:.0f} damage and {mvp['kills']} {'knockouts' if mvp['kills'] > 1 else 'knockout'}. {comedic_skill}",
+                StoryTone.SERIOUS: f"\n\n**TOP PERFORMER**: {mvp['name']}. Damage output: {mvp['damage']:.0f}. Eliminations: {mvp['kills']}. Critical strike rate: {mvp['crits']}.",
+                StoryTone.DOCUMENTARY: f"\n\nThe alpha specimen, **{mvp['name']}**, demonstrated superior fitness with {mvp['damage']:.0f} damage output and {mvp['kills']} successful eliminations.",
+            }
+            story_parts.append(mvp_narrative.get(tone, mvp_narrative[StoryTone.DRAMATIC]))
+        
+        # === CASUALTIES AND BIRTHS ===
+        if metrics.total_kills > 0 or metrics.total_births > 0:
+            lifecycle_narrative = {
+                StoryTone.HEROIC: f"\n\nThe price of glory was steep: {metrics.total_kills} brave warriors fell in combat{'.' if metrics.total_births == 0 else f', yet hope endured as {metrics.total_births} new life emerged from the struggle.'}",
+                StoryTone.DRAMATIC: f"\n\n{metrics.total_kills} warriors met their end in the arena's embrace{', their sacrifice not in vain' if metrics.total_births > 0 else ', leaving only echoes'}.{f' Yet from loss came renewal: {metrics.total_births} born amid the carnage.' if metrics.total_births > 0 else ''}",
+                StoryTone.COMEDIC: f"\n\n{metrics.total_kills} participants 'took a nap' (permanently){', but hey, ' + str(metrics.total_births) + ' new ones showed up! The cycle continues!' if metrics.total_births > 0 else '. Someone should probably call their families.'}",
+                StoryTone.SERIOUS: f"\n\nCasualty count: {metrics.total_kills}. {f'New arrivals: {metrics.total_births}.' if metrics.total_births > 0 else 'No reinforcements.'}",
+                StoryTone.DOCUMENTARY: f"\n\nPopulation attrition: {metrics.total_kills} individuals. {f'Reproduction events: {metrics.total_births}. Population dynamics remain active.' if metrics.total_births > 0 else 'No offspring observed.'}",
+            }
+            story_parts.append(lifecycle_narrative.get(tone, lifecycle_narrative[StoryTone.DRAMATIC]))
+        
+        # === KEY MOMENTS ===
+        if metrics.key_moments:
+            moment = metrics.key_moments[0]  # Pick first major moment
+            story_parts.append(f"\n\n**Turning Point**: {moment}")
+        
+        # === DRAMATIC EVENTS ===
+        if metrics.dramatic_events and len(metrics.dramatic_events) > 0:
+            event = metrics.dramatic_events[0]
+            story_parts.append(f"\n\n**Most Dramatic Moment**: {event}")
+        
+        # === CLOSING ===
+        # Prepare comedic text without nested quotes
+        comedic_remember = "! They probably won't remember how" if metrics.creatures_survived > 0 else ', which is honestly for the best'
+        
+        closings = {
+            StoryTone.HEROIC: f"\n\nWhen the dust settled, {metrics.creatures_survived if metrics.creatures_survived > 0 else 'none'} {'heroes stood victorious' if metrics.creatures_survived > 1 else 'hero remained'}, their names forever etched in the annals of arena legend. Their deeds shall be sung for generations!",
+            StoryTone.DRAMATIC: f"\n\nAs silence fell over the battlefield, {metrics.creatures_survived if metrics.creatures_survived > 0 else 'no one'} remained standing{' among the fallen' if metrics.creatures_survived > 0 else ', only memory and shadow'}. The arena had claimed its toll, and the survivors would carry these scars forever.",
+            StoryTone.COMEDIC: f"\n\nSomehow, {metrics.creatures_survived if metrics.creatures_survived > 0 else 'nobody'} survived this mess{comedic_remember}. Same time next week?",
+            StoryTone.SERIOUS: f"\n\nCombat concluded. Survivors: {metrics.creatures_survived if metrics.creatures_survived > 0 else 0}. Mission {' complete' if metrics.creatures_survived > 0 else 'failed'}.",
+            StoryTone.DOCUMENTARY: f"\n\nPost-conflict census: {metrics.creatures_survived if metrics.creatures_survived > 0 else 0} surviving specimens. Natural selection pressure: extreme. Study concluded.",
+        }
+        
+        story_parts.append(closings.get(tone, closings[StoryTone.DRAMATIC]))
+        
+        # === FOOTER ===
+        footer = f"\n\n---\n📊 Battle Summary: {duration_min}m {duration_sec}s | {metrics.total_attacks} attacks | {metrics.total_kills} casualties | {metrics.total_births} births"
+        story_parts.append(footer)
+        
+        return "".join(story_parts)
     
     def generate_story(
         self,
-        tone: Optional[StoryTone] = None,
-        max_tokens: int = 500
+        tone: Optional[StoryTone] = None
     ) -> str:
         """
-        Generate an AI-powered story from collected events.
+        Generate an engaging story from collected events using local processing.
         
         Args:
             tone: Narrative tone (uses default if not specified)
-            max_tokens: Maximum tokens for AI generation
             
         Returns:
             Generated story as a string
         """
         tone = tone or self.default_tone
-        
-        # If OpenAI is not available or not configured, use fallback
-        if not self.client:
-            return self._build_fallback_story(tone)
-        
-        try:
-            # Build prompt
-            prompt = self._build_ai_prompt(tone)
-            
-            # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a creative battle narrator who creates engaging stories from combat logs."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_tokens=max_tokens,
-                temperature=0.8
-            )
-            
-            # Extract story
-            story = response.choices[0].message.content.strip()
-            
-            # Add metadata footer
-            metrics = self._extract_metrics_from_logs()
-            footer = f"\n\n---\nBattle Duration: {metrics.duration_seconds/60:.1f} minutes | "
-            footer += f"Attacks: {metrics.total_attacks} | "
-            footer += f"Casualties: {metrics.total_kills} | "
-            footer += f"Births: {metrics.total_births}"
-            
-            return story + footer
-            
-        except Exception as e:
-            # Fall back to basic story on error
-            print(f"AI story generation failed: {e}")
-            return self._build_fallback_story(tone)
+        return self._build_narrative_story(tone)
     
     def export_story(self, story: str, filepath: str, format: str = 'txt'):
         """
