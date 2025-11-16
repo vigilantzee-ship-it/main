@@ -6,7 +6,7 @@ import unittest
 from src.systems.battle_spatial import SpatialBattle
 from src.models.creature import Creature, CreatureType
 from src.models.stats import Stats
-from src.models.ecosystem_traits import FORAGER, EFFICIENT_METABOLISM
+from src.models.ecosystem_traits import FORAGER, EFFICIENT_METABOLISM, HERBIVORE
 
 
 class TestEcosystemBreeding(unittest.TestCase):
@@ -46,35 +46,35 @@ class TestEcosystemBreeding(unittest.TestCase):
     def test_breeding_in_spatial_battle(self):
         """Test that breeding occurs in spatial battle with mature, healthy creatures."""
         # Create multiple mature creatures with good health and hunger
-        # More creatures increase the chance that some will be close enough to breed
+        # Use HERBIVORE trait to prevent them from attacking each other
         creatures = []
-        for i in range(4):
+        for i in range(8):  # Increased from 4 to 8 creatures
             creature = Creature(
                 name=f"Founder{i}",
                 creature_type=self.creature_type,
                 mature=True,
-                traits=[FORAGER, EFFICIENT_METABOLISM]
+                traits=[FORAGER, EFFICIENT_METABOLISM, HERBIVORE]  # Added HERBIVORE to prevent combat
             )
             # Ensure full health and high hunger
             creature.stats.hp = creature.stats.max_hp
             creature.hunger = 100
             creatures.append(creature)
         
-        # Create battle with high resource spawn rate
+        # Create battle with high resource spawn rate and smaller arena for more breeding
         battle = SpatialBattle(
             creatures,
-            arena_width=50.0,
-            arena_height=50.0,
+            arena_width=30.0,  # Reduced from 50 to 30 for closer proximity
+            arena_height=30.0,  # Reduced from 50 to 30
             resource_spawn_rate=1.0,
-            initial_resources=20
+            initial_resources=50  # More resources to keep hunger high
         )
         
         # Track initial population
         initial_population = len(battle.creatures)
         
         # Run simulation for enough time to allow breeding
-        # Breeding cooldown is 5 seconds, so run for 30 seconds to get multiple checks
-        for _ in range(300):  # 30 seconds at 0.1s per step
+        # Breeding cooldown is 20 seconds (updated from 5), so run for 100 seconds to get multiple checks
+        for _ in range(1000):  # 100 seconds at 0.1s per step (increased from 600)
             battle.update(0.1)
             if battle.is_over:
                 break
