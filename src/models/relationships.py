@@ -22,6 +22,7 @@ class RelationshipType(Enum):
     CHILD = "child"
     SIBLING = "sibling"
     ALLY = "ally"
+    FRIEND = "friend"  # Creatures that have positive interactions
     RIVAL = "rival"
     RESPECT = "respect"
     FEAR = "fear"
@@ -127,7 +128,7 @@ class Relationship:
         """
         self.shared_history.record_interaction(behavior_type)
         self.metrics = update_metrics_after_cooperation(self.metrics, behavior_type)
-        self.strengthen(0.02)  # Cooperation strengthens relationship
+        self.strengthen(0.05)  # Increased from 0.02 to 0.05 for faster friendship formation
     
     def strengthen(self, amount: float = 0.1):
         """
@@ -335,12 +336,38 @@ class RelationshipManager:
         """
         rel = self.get_relationship(ally_id)
         if rel:
-            rel.strengthen(0.05)
+            rel.strengthen(0.08)  # Increased from 0.05 for faster bonding
             rel.add_event("fought_together", "Fought alongside in battle")
         else:
-            # Create ally relationship
-            rel = self.add_relationship(ally_id, RelationshipType.ALLY, strength=0.3)
+            # Create ally relationship with stronger initial bond
+            rel = self.add_relationship(ally_id, RelationshipType.ALLY, strength=0.4)
             rel.add_event("fought_together", "First time fighting together")
+    
+    def record_positive_interaction(self, other_id: str, interaction_type: str = "peaceful_encounter"):
+        """
+        Record a positive non-combat interaction that may form friendship.
+        
+        Args:
+            other_id: ID of the other creature
+            interaction_type: Type of positive interaction
+        """
+        rel = self.get_relationship(other_id)
+        if rel:
+            # Strengthen existing relationship
+            if rel.relationship_type in [RelationshipType.RIVAL, RelationshipType.FEAR, RelationshipType.REVENGE_TARGET]:
+                # Don't form friendship with rivals/feared creatures/revenge targets
+                return
+            rel.strengthen(0.04)  # Increased from 0.03 for faster friendship formation
+            rel.add_event(interaction_type, "Peaceful interaction")
+            
+            # Upgrade to friendship if strong enough
+            if rel.relationship_type == RelationshipType.ALLY and rel.strength >= 0.6:  # Lowered from 0.7
+                rel.relationship_type = RelationshipType.FRIEND
+                rel.add_event("became_friends", "Friendship formed through repeated positive interactions")
+        else:
+            # Create new friendship with moderate initial strength
+            rel = self.add_relationship(other_id, RelationshipType.FRIEND, strength=0.3)  # Increased from 0.2
+            rel.add_event(interaction_type, "First positive interaction")
     
     def record_family_killed(self, killer_id: str, family_member_name: str):
         """
@@ -426,14 +453,26 @@ class RelationshipManager:
     
     def get_allies(self) -> List[Relationship]:
         """
-        Get all ally relationships.
+        Get all ally relationships (includes allies and friends).
         
         Returns:
-            List of ally relationships
+            List of ally and friend relationships
         """
         return [
             rel for rel in self.relationships.values()
-            if rel.relationship_type == RelationshipType.ALLY
+            if rel.relationship_type in [RelationshipType.ALLY, RelationshipType.FRIEND]
+        ]
+    
+    def get_friends(self) -> List[Relationship]:
+        """
+        Get all friend relationships.
+        
+        Returns:
+            List of friend relationships
+        """
+        return [
+            rel for rel in self.relationships.values()
+            if rel.relationship_type == RelationshipType.FRIEND
         ]
     
     def get_enemies(self) -> List[Relationship]:
