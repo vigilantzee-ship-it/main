@@ -28,7 +28,7 @@ class ArenaRenderer:
         border_color: tuple = (100, 100, 120),
         hazard_color: tuple = (200, 50, 50),
         resource_color: tuple = (50, 200, 100),
-        show_grid: bool = True,
+        show_grid: bool = False,
         pellet_renderer = None
     ):
         """
@@ -39,7 +39,7 @@ class ArenaRenderer:
             border_color: RGB color for arena border
             hazard_color: RGB color for hazards
             resource_color: RGB color for resources (for simple Vector2D resources)
-            show_grid: Whether to display the grid
+            show_grid: Whether to display the grid (default False for performance)
             pellet_renderer: Optional PelletRenderer for detailed pellet rendering
         """
         self.grid_color = grid_color
@@ -53,6 +53,10 @@ class ArenaRenderer:
         self.bg_color = (30, 30, 40)
         self.player_side_tint = (30, 40, 50)
         self.enemy_side_tint = (50, 40, 40)
+        
+        # Grid cache for performance
+        self._cached_grid_surface = None
+        self._cached_grid_bounds = None
     
     def render(self, screen: pygame.Surface, battle: SpatialBattle):
         """
@@ -146,37 +150,48 @@ class ArenaRenderer:
         return self._world_to_screen(world_pos, bounds, arena)
     
     def _draw_grid(self, screen: pygame.Surface, bounds: tuple, arena):
-        """Draw grid lines on the arena."""
+        """Draw grid lines on the arena using cached surface when possible."""
         x, y, width, height = bounds
         
-        # Draw vertical lines (every 10 units)
-        grid_spacing_world = 10.0
-        num_vertical_lines = int(arena.width / grid_spacing_world)
+        # Check if we need to regenerate the grid cache
+        if (self._cached_grid_surface is None or 
+            self._cached_grid_bounds != bounds or
+            self._cached_grid_surface.get_size() != (width, height)):
+            # Create cached grid surface
+            self._cached_grid_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+            self._cached_grid_bounds = bounds
+            
+            # Draw vertical lines (every 10 units)
+            grid_spacing_world = 10.0
+            num_vertical_lines = int(arena.width / grid_spacing_world)
+            
+            for i in range(1, num_vertical_lines):
+                world_x = i * grid_spacing_world
+                screen_x = int((world_x / arena.width) * width)
+                pygame.draw.line(
+                    self._cached_grid_surface,
+                    self.grid_color,
+                    (screen_x, 0),
+                    (screen_x, height),
+                    1
+                )
+            
+            # Draw horizontal lines
+            num_horizontal_lines = int(arena.height / grid_spacing_world)
+            
+            for i in range(1, num_horizontal_lines):
+                world_y = i * grid_spacing_world
+                screen_y = int((world_y / arena.height) * height)
+                pygame.draw.line(
+                    self._cached_grid_surface,
+                    self.grid_color,
+                    (0, screen_y),
+                    (width, screen_y),
+                    1
+                )
         
-        for i in range(1, num_vertical_lines):
-            world_x = i * grid_spacing_world
-            screen_x = x + int((world_x / arena.width) * width)
-            pygame.draw.line(
-                screen,
-                self.grid_color,
-                (screen_x, y),
-                (screen_x, y + height),
-                1
-            )
-        
-        # Draw horizontal lines
-        num_horizontal_lines = int(arena.height / grid_spacing_world)
-        
-        for i in range(1, num_horizontal_lines):
-            world_y = i * grid_spacing_world
-            screen_y = y + int((world_y / arena.height) * height)
-            pygame.draw.line(
-                screen,
-                self.grid_color,
-                (x, screen_y),
-                (x + width, screen_y),
-                1
-            )
+        # Blit the cached grid surface
+        screen.blit(self._cached_grid_surface, (x, y))
     
     def _world_to_screen(
         self,

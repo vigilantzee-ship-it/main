@@ -32,7 +32,7 @@ class GameWindow:
         self,
         width: int = 1200,
         height: int = 800,
-        fps: int = 60,
+        fps: int = 30,
         title: str = "EvoBattle - Spatial Combat Arena"
     ):
         """
@@ -41,7 +41,7 @@ class GameWindow:
         Args:
             width: Window width in pixels
             height: Window height in pixels
-            fps: Target frames per second
+            fps: Target frames per second (default 30 for better performance)
             title: Window title
         """
         self.width = width
@@ -65,6 +65,58 @@ class GameWindow:
         
         # Event callbacks
         self._input_callbacks: List[Callable[[pygame.event.Event], None]] = []
+        
+        # Performance monitoring
+        self.show_fps = True
+        self._fps_font = pygame.font.Font(None, 24)
+        self._frame_times = []
+        self._max_frame_samples = 30
+    
+    def set_fps(self, fps: int):
+        """
+        Set the target FPS at runtime.
+        
+        Args:
+            fps: Target frames per second
+        """
+        self.fps = max(10, min(120, fps))  # Clamp between 10 and 120
+    
+    def toggle_fps_display(self):
+        """Toggle the FPS counter display."""
+        self.show_fps = not self.show_fps
+    
+    def _render_fps(self, screen: pygame.Surface, actual_fps: float):
+        """
+        Render FPS counter overlay.
+        
+        Args:
+            screen: Pygame surface to draw on
+            actual_fps: Current measured FPS
+        """
+        if not self.show_fps:
+            return
+        
+        # Determine color based on performance
+        if actual_fps >= self.fps * 0.9:
+            color = (100, 255, 100)  # Green - good
+        elif actual_fps >= self.fps * 0.7:
+            color = (255, 255, 100)  # Yellow - okay
+        else:
+            color = (255, 100, 100)  # Red - poor
+        
+        fps_text = f"FPS: {actual_fps:.1f} / {self.fps}"
+        fps_surface = self._fps_font.render(fps_text, True, color)
+        
+        # Position in top-right corner
+        fps_rect = fps_surface.get_rect(topright=(screen.get_width() - 10, 10))
+        
+        # Semi-transparent background
+        bg_rect = fps_rect.inflate(10, 6)
+        bg_surface = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(bg_surface, (0, 0, 0, 180), pygame.Rect(0, 0, bg_rect.width, bg_rect.height), border_radius=5)
+        screen.blit(bg_surface, bg_rect.topleft)
+        
+        screen.blit(fps_surface, fps_rect)
     
     def set_battle(self, battle: SpatialBattle):
         """
@@ -94,6 +146,14 @@ class GameWindow:
                     self.running = False
                 elif event.key == pygame.K_SPACE:
                     self.paused = not self.paused
+                elif event.key == pygame.K_F3:
+                    self.toggle_fps_display()
+                elif event.key == pygame.K_MINUS or event.key == pygame.K_KP_MINUS:
+                    # Decrease FPS
+                    self.set_fps(self.fps - 5)
+                elif event.key == pygame.K_EQUALS or event.key == pygame.K_KP_PLUS:
+                    # Increase FPS (using = key which is + without shift)
+                    self.set_fps(self.fps + 5)
             
             # Call custom input callbacks
             for callback in self._input_callbacks:
@@ -109,7 +169,27 @@ class GameWindow:
     def update_display(self):
         """Flip the display buffer to show the rendered frame."""
         pygame.display.flip()
-        self.clock.tick(self.fps)
+        actual_dt = self.clock.tick(self.fps)
+        
+        # Track frame times for FPS calculation
+        if len(self._frame_times) >= self._max_frame_samples:
+            self._frame_times.pop(0)
+        self._frame_times.append(actual_dt)
+    
+    def get_actual_fps(self) -> float:
+        """
+        Get the actual measured FPS.
+        
+        Returns:
+            Current FPS based on recent frame times
+        """
+        if not self._frame_times:
+            return 0.0
+        
+        avg_frame_time = sum(self._frame_times) / len(self._frame_times)
+        if avg_frame_time > 0:
+            return 1000.0 / avg_frame_time
+        return 0.0
     
     def run(
         self,
@@ -157,6 +237,9 @@ class GameWindow:
             ui_components.render(self.screen, battle, self.paused)
             event_animator.update(delta_time)
             event_animator.render(self.screen)
+            
+            # Render FPS counter
+            self._render_fps(self.screen, self.get_actual_fps())
             
             # Update display
             self.update_display()

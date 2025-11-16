@@ -49,6 +49,9 @@ class UIComponents:
         # Colors
         self.text_color = (255, 255, 255)
         self.panel_bg = (20, 20, 30, 180)
+        
+        # Text surface cache for performance
+        self._text_cache = {}
     
     def add_event_to_log(self, event: BattleEvent):
         """
@@ -70,6 +73,34 @@ class UIComponents:
             BattleEventType.BATTLE_END
         ]:
             self.event_log.append(event.message)
+    
+    def _get_cached_text(self, text: str, font: pygame.font.Font, color: tuple) -> pygame.Surface:
+        """
+        Get a cached text surface or create and cache it.
+        
+        Args:
+            text: Text to render
+            font: Font to use (reference via font size)
+            color: Text color
+            
+        Returns:
+            Rendered text surface
+        """
+        # Create cache key from text, font size, and color
+        font_size = font.get_height()
+        cache_key = (text, font_size, color)
+        
+        if cache_key not in self._text_cache:
+            # Limit cache size to prevent memory issues
+            if len(self._text_cache) > 300:
+                # Clear oldest 100 entries (simple cache management)
+                keys_to_remove = list(self._text_cache.keys())[:100]
+                for key in keys_to_remove:
+                    del self._text_cache[key]
+            
+            self._text_cache[cache_key] = font.render(text, True, color)
+        
+        return self._text_cache[cache_key]
     
     def render(self, screen: pygame.Surface, battle: SpatialBattle, paused: bool = False):
         """
@@ -117,13 +148,13 @@ class UIComponents:
         
         # Title
         title_text = "EvoBattle - Spatial Combat Arena"
-        title_surface = self.title_font.render(title_text, True, self.text_color)
+        title_surface = self._get_cached_text(title_text, self.title_font, self.text_color)
         title_rect = title_surface.get_rect(center=(screen_width // 2, 25))
         screen.blit(title_surface, title_rect)
         
         # Battle time
         time_text = f"Time: {battle.current_time:.1f}s"
-        time_surface = self.text_font.render(time_text, True, self.text_color)
+        time_surface = self._get_cached_text(time_text, self.text_font, self.text_color)
         time_rect = time_surface.get_rect(center=(screen_width // 2, 55))
         screen.blit(time_surface, time_rect)
     
@@ -164,7 +195,7 @@ class UIComponents:
         
         # Header
         header_text = "GENETIC STRAINS" if is_left else "CREATURES"
-        header_surface = self.text_font.render(header_text, True, self.text_color)
+        header_surface = self._get_cached_text(header_text, self.text_font, self.text_color)
         header_rect = header_surface.get_rect(centerx=panel_width // 2, top=10)
         screen.blit(header_surface, (panel_x + header_rect.x, panel_y + header_rect.y))
         
@@ -308,7 +339,7 @@ class UIComponents:
         screen.blit(panel_surface, (0, panel_y))
         
         # Title
-        title_surface = self.text_font.render("Battle Feed", True, (200, 200, 255))
+        title_surface = self._get_cached_text("Battle Feed", self.text_font, (200, 200, 255))
         screen.blit(title_surface, (20, panel_y + 10))
         
         # Event messages
@@ -317,7 +348,7 @@ class UIComponents:
             if y_offset > panel_height - 20:
                 break
             
-            text_surface = self.small_font.render(event_msg, True, self.text_color)
+            text_surface = self._get_cached_text(event_msg, self.small_font, self.text_color)
             screen.blit(text_surface, (20, panel_y + y_offset))
             y_offset += 20
     

@@ -90,8 +90,10 @@ def main():
     print("Watch creatures battle in real-time with full visual rendering!")
     print()
     print("Controls:")
-    print("  SPACE - Pause/Resume")
-    print("  ESC   - Exit")
+    print("  SPACE  - Pause/Resume")
+    print("  ESC    - Exit")
+    print("  F3     - Toggle FPS display")
+    print("  +/-    - Increase/Decrease target FPS")
     print()
     input("Press Enter to start the battle...")
     
@@ -99,8 +101,9 @@ def main():
     battle = create_demo_battle()
     
     # Create rendering components
-    window = GameWindow(width=1200, height=800, fps=60)
-    arena_renderer = ArenaRenderer(show_grid=True)
+    # Using default FPS of 30 for better performance on various hardware
+    window = GameWindow(width=1200, height=800)  # Uses default fps=30
+    arena_renderer = ArenaRenderer(show_grid=False)  # Grid off by default for performance
     creature_renderer = CreatureRenderer()
     ui_components = UIComponents(max_log_entries=8)
     event_animator = EventAnimator()
@@ -149,6 +152,9 @@ def main():
             ui_components.render(window.screen, battle, window.paused)
             event_animator.update(delta_time)
             event_animator.render(window.screen)
+            
+            # Render FPS counter
+            window._render_fps(window.screen, window.get_actual_fps())
             
             # Update display
             window.update_display()
