@@ -451,6 +451,69 @@ class CreatureInspector:
         content.blit(style_text, (x_margin + 10, y))
         y += self.line_height + self.section_spacing
         
+        # === Traits Section ===
+        y = self._render_section_header(content, "Genetic Traits", x_margin, y)
+        
+        if creature.traits:
+            for trait in creature.traits[:8]:  # Show up to 8 traits
+                # Trait name with rarity indicator
+                rarity_colors = {
+                    'common': (200, 200, 200),
+                    'uncommon': (100, 200, 100),
+                    'rare': (100, 150, 255),
+                    'legendary': (255, 215, 0)
+                }
+                trait_color = rarity_colors.get(trait.rarity, self.text_color)
+                
+                # Rarity indicator
+                rarity_marker = {
+                    'common': "○",
+                    'uncommon': "◆",
+                    'rare': "★",
+                    'legendary': "✦"
+                }.get(trait.rarity, "•")
+                
+                trait_line = f"{rarity_marker} {trait.name}"
+                trait_text = self.text_font.render(trait_line, True, trait_color)
+                content.blit(trait_text, (x_margin + 10, y))
+                y += self.line_height
+                
+                # Provenance indicator (NEW!)
+                if hasattr(trait, 'provenance') and trait.provenance:
+                    source_icons = {
+                        'inherited': "👪",
+                        'mutated': "🧬",
+                        'emergent': "✨",
+                        'cosmic': "🌟",
+                        'adaptive': "🛡️",
+                        'diversity_intervention': "🎲"
+                    }
+                    source_icon = source_icons.get(trait.provenance.source_type, "•")
+                    source_text = f"{source_icon} {trait.provenance.source_type.title()}"
+                    
+                    if trait.provenance.generation > 0:
+                        source_text += f" (Gen {trait.provenance.generation})"
+                    
+                    prov_color = (150, 150, 150)
+                    if trait.provenance.source_type in ['emergent', 'cosmic', 'adaptive']:
+                        prov_color = (255, 200, 100)  # Highlight special origins
+                    
+                    prov_render = self.small_font.render(source_text, True, prov_color)
+                    content.blit(prov_render, (x_margin + 25, y))
+                    y += self.line_height - 2
+                
+                # Trait description (truncated)
+                desc_truncated = trait.description[:60] + "..." if len(trait.description) > 60 else trait.description
+                desc_text = self.small_font.render(desc_truncated, True, (180, 180, 180))
+                content.blit(desc_text, (x_margin + 25, y))
+                y += self.line_height + 2
+        else:
+            text = self.small_font.render("No special traits", True, (150, 150, 150))
+            content.blit(text, (x_margin + 10, y))
+            y += self.line_height
+        
+        y += self.section_spacing
+        
         # === Skills Section ===
         y = self._render_section_header(content, "Skills", x_margin, y)
         
