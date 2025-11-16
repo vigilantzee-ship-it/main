@@ -2,14 +2,16 @@
 
 ## Overview
 
-The Battle Story Mode feature transforms raw battle events into engaging, AI-powered narratives that capture the drama, heroism, and memorable moments of combat. This system automatically generates story summaries at configurable intervals, creating shareable battle reports that bring the simulation to life.
+The Battle Story Mode feature transforms raw battle events into engaging narratives that capture the drama, heroism, and memorable moments of combat. This system **uses local text processing** (completely free, no API required) to automatically generate story summaries at configurable intervals, creating shareable battle reports that bring the simulation to life.
 
 ## Features
 
-### AI-Powered Story Generation
+### Local Story Generation (100% Free)
+- **No API Costs**: Runs entirely locally using template-based narrative generation
+- **Instant Results**: No network latency, stories generated in milliseconds
+- **Works Offline**: No internet connection required
 - **Multiple Narrative Tones**: Choose from dramatic, heroic, comedic, serious, or documentary styles
 - **Automatic Summarization**: Stories generated at configurable intervals (default: 5 minutes)
-- **Fallback Mode**: Works without AI API - generates structured summaries from battle metrics
 - **Rich Context**: Incorporates battle statistics, key moments, and dramatic events
 
 ### Story Metrics
@@ -120,23 +122,33 @@ python3 -m examples.battle_story_mode_demo
 
 ### Dramatic (Default)
 Creates tension-filled narratives with emotional weight and dramatic tension:
-> "In the shadow of the ancient arena, warriors clashed with desperate fury. Aragorn's blade sang through the air as Saruman's dark forces pressed their advantage. When all seemed lost, a critical strike turned the tide..."
+> "⚡ **THE ARENA REMEMBERS** ⚡
+> 
+> Blood and steel met in a 5-minute battle that would echo through eternity. Through 67 brutal exchanges, 1247 points of damage painted the arena red. Amidst the chaos, one name rose above all others: **Aragorn**. Their story would not be forgotten..."
 
 ### Heroic
 Epic tales celebrating bravery, valor, and legendary feats:
-> "From the halls of legend comes this tale of valor! The brave Aragorn stood tall against impossible odds, his courage inspiring allies to heights of glory. With mighty blows and unwavering spirit..."
+> "⚔️ **LEGENDS OF THE ARENA** ⚔️
+> 
+> In an epic clash spanning 5 minutes, warriors of renown gathered to test their mettle in glorious combat. **HERO OF THE HOUR**: Aragorn emerged as the champion, their blade singing through the arena with 247 damage dealt. Their deeds shall be sung for generations!"
 
 ### Comedic
 Lighthearted accounts finding humor in the chaos:
-> "Well, that escalated quickly! Gandalf attempted a dramatic entrance but tripped over a pellet. Meanwhile, Pippin discovered that aggressive charging works better when you pick a target first..."
+> "🎭 **CHAOS IN THE ARENA** 🎭
+> 
+> Well, this was supposed to be an organized battle. Our 'fighters' swung wildly 67 times, somehow managing 1247 damage (most of it accidental). **MVP (Most Violent Participant)**: Aragorn somehow managed to not fall over while swinging. Beginner's luck, surely!"
 
 ### Serious
 Gritty, realistic battle reports:
-> "Engagement commenced at 14:30. Casualties mounted as aggressive tactics from Team Broans met staunch defense. Kill ratio 3:2. Resource depletion critical by minute 4..."
+> "📋 **COMBAT REPORT** 📋
+> 
+> Engagement duration: 5m 23s. Combatants: 10. Engagement count: 67. Total damage output: 1247. **TOP PERFORMER**: Aragorn. Damage output: 247. Eliminations: 3."
 
 ### Documentary
 Analytical, nature documentary style:
-> "Here in the digital arena, we observe the fascinating behavior of the warrior species. Note how the aggressive phenotype dominates early exchanges, while cautious variants employ evasion tactics..."
+> "📊 **ARENA ECOLOGY STUDY** 📊
+> 
+> Here in their natural habitat, we observe 10 specimens engaging in territorial combat. Aggression displays numbered 67, with cumulative damage reaching 1247 units. The alpha specimen, **Aragorn**, demonstrated superior fitness..."
 
 ## Configuration
 
@@ -162,39 +174,22 @@ tracker = BattleStoryTracker(
 )
 ```
 
-### AI Model Selection
+### Tone Selection
 
 ```python
-# Use different OpenAI models
-generator = BattleStoryGenerator(
-    model="gpt-4o",  # More creative, higher quality
-    default_tone=StoryTone.HEROIC
-)
+# Create generator with preferred default tone
+generator = BattleStoryGenerator(default_tone=StoryTone.HEROIC)
 
-generator = BattleStoryGenerator(
-    model="gpt-4o-mini",  # Faster, more cost-effective (default)
-    default_tone=StoryTone.DRAMATIC
-)
+# Generate with specific tone
+story = generator.generate_story(tone=StoryTone.COMEDIC)
+
+# Available tones
+# - StoryTone.DRAMATIC (default)
+# - StoryTone.HEROIC
+# - StoryTone.COMEDIC  
+# - StoryTone.SERIOUS
+# - StoryTone.DOCUMENTARY
 ```
-
-### API Key Configuration
-
-Set your OpenAI API key via environment variable:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-Or pass it directly:
-
-```python
-generator = BattleStoryGenerator(
-    api_key="sk-...",
-    model="gpt-4o-mini"
-)
-```
-
-**Note**: If no API key is provided, the system automatically falls back to metric-based story generation.
 
 ## Architecture
 
@@ -253,29 +248,30 @@ if tracker.should_generate_story():
 ## Example Story Output
 
 ```
-⚡ BATTLE STORY ⚡
+⚔️ **TALES OF VALOR** ⚔️
 
-In a fierce arena clash spanning three intense minutes, ten warriors 
-entered but only five would emerge victorious. The battle opened with 
-Aragorn and Gimli leading an aggressive charge, their coordinated strikes 
-overwhelming the cautious Frodo early on.
+From across the realm they came, 10 brave souls seeking honor and glory 
+in 3 minutes of legendary battle.
 
-The tide turned when Gandalf executed a masterful comeback, recovering 
-from near-death with only 8% health to strike down Saruman in a critical 
-blow. This stunning reversal emboldened the Alliance, leading to a series 
-of dramatic confrontations.
+The warriors clashed 67 times, their mighty blows dealing 1247 damage total. 
+12 strikes found critical weaknesses, each one a testament to skill and fortune.
 
-Notable moments included Sam's surprising betrayal of his longtime ally 
-Merry, and Legolas's precision strikes that earned him MVP status with 
-247 damage dealt across 18 attacks. The arena saw 11 casualties, 3 births, 
-and countless narrow escapes as warriors scrambled for the 23 resources 
-scattered across the battlefield.
+**HERO OF THE HOUR**: Aragorn emerged as the champion, their blade singing 
+through the arena with 247 damage dealt and 3 foes vanquished. A true legend 
+in the making!
 
-In the end, the survivors—bloodied but unbroken—stood among the ruins, 
-their stories forever etched in arena legend.
+The price of glory was steep: 7 brave warriors fell in combat, yet hope 
+endured as 2 new life emerged from the struggle.
+
+**Turning Point**: Gandalf and Aragorn formed an unexpected alliance
+
+**Most Dramatic Moment**: Saruman's last stand against overwhelming odds
+
+When the dust settled, 5 heroes stood victorious, their names forever etched 
+in the annals of arena legend. Their deeds shall be sung for generations!
 
 ---
-Battle Duration: 3.2 minutes | Attacks: 67 | Casualties: 11 | Births: 3
+📊 Battle Summary: 3m 14s | 67 attacks | 7 casualties | 2 births
 ```
 
 ## API Reference
@@ -284,8 +280,6 @@ Battle Duration: 3.2 minutes | Attacks: 67 | Casualties: 11 | Births: 3
 
 ```python
 BattleStoryGenerator(
-    api_key: Optional[str] = None,
-    model: str = "gpt-4o-mini",
     default_tone: StoryTone = StoryTone.DRAMATIC
 )
 ```
@@ -294,7 +288,7 @@ BattleStoryGenerator(
 - `start_collection()`: Begin collecting events
 - `add_event(event)`: Add a battle event
 - `add_log(message)`: Add a log message
-- `generate_story(tone, max_tokens)`: Generate story
+- `generate_story(tone)`: Generate story with specified tone
 - `export_story(story, filepath, format)`: Export to file
 
 ### BattleStoryTracker
@@ -340,37 +334,23 @@ StoryViewer(
 
 ## Troubleshooting
 
-### No AI Stories Generated
-- Check `OPENAI_API_KEY` environment variable
-- Verify API key has credits
-- Check console for error messages
-- Fallback mode should still work
-
-### Story Too Short/Long
-- Adjust `max_tokens` parameter in `generate_story()`
-- Default is 500 tokens (~350 words)
+### Stories Seem Generic
+- Add more detailed battle logs for richer context
+- Ensure creature names are being tracked properly
+- Add key moments and dramatic events to logs
 
 ### Export Fails
 - Check write permissions for export directory
 - Verify directory exists or can be created
 - Check disk space
 
-## Future Enhancements
-
-Planned features for future releases:
-- [ ] Integration with Discord webhooks
-- [ ] Image generation for key moments
-- [ ] Multi-story compilation for long battles
-- [ ] Player-facing story gallery UI
-- [ ] Voice narration option
-- [ ] Community story sharing platform
-
 ## Performance Notes
 
-- Story generation is async-friendly (API calls can be non-blocking)
-- Fallback mode is instant (no API latency)
-- Metrics extraction is lightweight (< 1ms typically)
-- UI rendering is optimized for 60 FPS
+- Story generation is instant (< 1ms typically for local processing)
+- No network latency - completely offline
+- No API rate limits or costs
+- Metrics extraction is lightweight
+- UI rendering optimized for 60 FPS
 
 ## Testing
 
