@@ -89,8 +89,8 @@ class CombatConfig:
     """Range to detect family members needing help"""
     
     # === Attack Parameters ===
-    base_attack_range_melee: float = 3.0
-    """Base range for melee attacks"""
+    base_attack_range_melee: float = 4.0
+    """Base range for melee attacks (increased from 3.0 to prevent circling)"""
     
     base_attack_range_ranged: float = 8.0
     """Base range for ranged/special attacks"""

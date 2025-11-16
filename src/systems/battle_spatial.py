@@ -120,6 +120,10 @@ class BattleCreature:
         # Movement state to prevent jitter
         self.current_movement_target: Optional[Vector2D] = None
         self.last_behavior_state: str = "combat"  # Track if seeking food vs combat (start in combat mode)
+        
+        # Combat engagement state to prevent circling
+        self.combat_engaged: bool = False  # True when actively fighting a target
+        self.combat_engagement_range: float = 6.0  # Distance to enter combat engagement
     
     def __hash__(self):
         """Make BattleCreature hashable based on creature ID."""
@@ -638,6 +642,14 @@ class SpatialBattle:
         if movement_target:
             creature.spatial.move_towards(movement_target, delta_time=delta_time)
             
+            # Check if creature is engaged in combat with target
+            # Combat engagement reduces separation to allow melee attacks
+            if creature.target and creature.target.is_alive():
+                distance_to_target = creature.spatial.distance_to(creature.target.spatial)
+                creature.combat_engaged = distance_to_target <= creature.combat_engagement_range
+            else:
+                creature.combat_engaged = False
+            
             # Apply collision avoidance - check nearby creatures and apply separation forces
             # Use spatial grid for efficient proximity queries
             nearby_creatures = self.creature_grid.query_radius(
@@ -647,10 +659,16 @@ class SpatialBattle:
             )
             
             # Apply separation force for each nearby creature
+            # Reduce separation when combat engaged to allow attacks
             for nearby in nearby_creatures:
                 if nearby.is_alive():
-                    # Apply separation with moderate strength to avoid jitter
-                    creature.spatial.apply_separation_force(nearby.spatial, strength=1.5)
+                    # If combat engaged with this specific target, greatly reduce separation
+                    if creature.combat_engaged and nearby == creature.target:
+                        # Minimal separation for combat target to allow attack
+                        creature.spatial.apply_separation_force(nearby.spatial, strength=0.3)
+                    else:
+                        # Normal separation for other creatures
+                        creature.spatial.apply_separation_force(nearby.spatial, strength=1.5)
             
             # Apply boundary repulsion to prevent getting stuck on walls
             self.arena.apply_boundary_repulsion(creature.spatial, margin=3.0, strength=1.2)
@@ -877,12 +895,13 @@ class SpatialBattle:
             # Basic attack
             ability = Ability(name="Basic Attack", power=10, accuracy=100)
         
-        # Check range
-        attack_range = 5.0  # Base attack range
+        # Check range - use config values with improved defaults
+        # Attack ranges should be larger than separation force threshold (2.5) to allow attacks
+        attack_range = self.combat_config.base_attack_range_melee  # Default 3.0
         if ability.ability_type == AbilityType.PHYSICAL:
-            attack_range = 3.0  # Melee range
+            attack_range = self.combat_config.base_attack_range_melee  # 3.0 - melee range
         elif ability.ability_type == AbilityType.SPECIAL:
-            attack_range = 8.0  # Ranged attack
+            attack_range = self.combat_config.base_attack_range_ranged  # 8.0 - ranged attack
         
         distance = attacker.spatial.distance_to(defender.spatial)
         
