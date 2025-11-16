@@ -60,6 +60,16 @@ A complete survival ecosystem simulation featuring:
 
 See [Ecosystem Documentation](ECOSYSTEM_DOCUMENTATION.md) for details.
 
+### Lethal Combat Traits ✓ NEW!
+High-risk, high-reward combat traits that enable dramatic kills and apex predators:
+- **10 New Offensive Traits**: Berserker, Executioner, Bloodthirsty, Brutal, Assassin, Apex Predator, Reckless Fury, Toxic, Frenzied, Vampiric
+- **Advanced Mechanics**: Bleed, poison, lifesteal, execute, multi-strike, armor penetration
+- **Glass Cannon Builds**: High offense with defensive trade-offs
+- **Scaling Effects**: Kill streaks, rage mode, fear auras
+- **Strategic Depth**: Counter-play and archetype diversity
+
+See [Lethal Combat Traits Documentation](LETHAL_COMBAT_TRAITS_DOCUMENTATION.md) for details.
+
 ### Genetic Lineage System ✓
 An evolutionary ecosystem where creatures form dynamic genetic families:
 - Strain-based families instead of fixed teams
