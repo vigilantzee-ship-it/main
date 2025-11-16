@@ -248,6 +248,7 @@ class CombatTargetingSystem:
             # Don't target allies or family (negative score)
             elif relationship.relationship_type in [
                 RelationshipType.ALLY,
+                RelationshipType.FRIEND,
                 RelationshipType.PARENT,
                 RelationshipType.CHILD,
                 RelationshipType.SIBLING
@@ -256,11 +257,12 @@ class CombatTargetingSystem:
         
         # Bonus for same strain rivals (genetic competition)
         if attacker.creature.strain_id == target.creature.strain_id:
-            # Slight bonus for intra-strain competition (unless family)
+            # Slight bonus for intra-strain competition (unless family or friends)
             if not relationship or relationship.relationship_type not in [
                 RelationshipType.PARENT,
                 RelationshipType.CHILD,
-                RelationshipType.SIBLING
+                RelationshipType.SIBLING,
+                RelationshipType.FRIEND
             ]:
                 score += 0.1
         

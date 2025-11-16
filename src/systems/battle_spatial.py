@@ -679,7 +679,8 @@ class SpatialBattle:
                         context
                     )
                     
-                    if selected_target:
+                    # Safety check: Never target self
+                    if selected_target and selected_target != creature:
                         creature.target = selected_target
                         creature.last_retarget_time = self.current_time
             
@@ -778,6 +779,26 @@ class SpatialBattle:
                     else:
                         # Normal separation for other creatures
                         creature.spatial.apply_separation_force(nearby.spatial, strength=1.5)
+                        
+                        # Form friendships during peaceful proximity (not in combat with each other)
+                        # Only process friendships occasionally to avoid overhead
+                        if hasattr(creature, 'last_friendship_check'):
+                            time_since_check = self.current_time - creature.last_friendship_check
+                        else:
+                            creature.last_friendship_check = 0
+                            time_since_check = 999  # Force first check
+                        
+                        if time_since_check >= 3.0:  # Check every 3 seconds
+                            creature.last_friendship_check = self.current_time
+                            # Don't form friendship if they're enemies or targeting each other
+                            is_enemy = creature.target == nearby or nearby.target == creature
+                            if not is_enemy and not self._is_ally(creature, nearby):
+                                # Random chance of forming friendship when near peacefully
+                                if random.random() < 0.15:  # 15% chance per check
+                                    creature.creature.relationships.record_positive_interaction(
+                                        nearby.creature.creature_id,
+                                        "peaceful_proximity"
+                                    )
             
             # Apply boundary repulsion to prevent getting stuck on walls
             self.arena.apply_boundary_repulsion(creature.spatial, margin=3.0, strength=1.2)
@@ -902,6 +923,7 @@ class SpatialBattle:
         Allies include:
         - Family members (parent, child, sibling)
         - Explicit ally relationships
+        - Friends
         - Same strain (if config enables strain cooperation)
         
         Args:
@@ -943,6 +965,14 @@ class SpatialBattle:
         if creature.creature.relationships.has_relationship(
             other.creature.creature_id,
             RelationshipType.ALLY
+        ):
+            self._ally_cache[cache_key] = True
+            return True
+        
+        # Check friend relationship
+        if creature.creature.relationships.has_relationship(
+            other.creature.creature_id,
+            RelationshipType.FRIEND
         ):
             self._ally_cache[cache_key] = True
             return True
@@ -1029,6 +1059,10 @@ class SpatialBattle:
     
     def _attempt_attack(self, attacker: BattleCreature, defender: BattleCreature):
         """Attempt an attack from attacker to defender."""
+        # Safety check: Never attack self
+        if attacker == defender:
+            return
+        
         # Choose ability
         usable_abilities = [
             a for a in attacker.creature.abilities
