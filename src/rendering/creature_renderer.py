@@ -105,6 +105,15 @@ class CreatureRenderer:
         # Draw creature name below
         self._draw_name(screen, creature, screen_pos)
         
+        # Draw combat engagement indicator
+        if creature.combat_engaged:
+            # Draw a pulsing ring around creatures in active combat
+            import time
+            pulse = (math.sin(time.time() * 5) + 1) / 2  # Pulse between 0 and 1
+            ring_radius = self.radius + 5 + int(pulse * 3)
+            ring_color = (255, 100, 100) if creature.combat_engaged else (255, 255, 100)
+            pygame.draw.circle(screen, ring_color, screen_pos, ring_radius, 2)
+        
         # Draw target line if creature has a target
         if creature.target and creature.target.is_alive():
             target_screen_pos = self._world_to_screen(
@@ -112,13 +121,15 @@ class CreatureRenderer:
                 screen,
                 battle.arena
             )
-            # Draw semi-transparent line to target
+            # Draw line to target - red if engaged, yellow if approaching
+            line_color = (255, 100, 100) if creature.combat_engaged else (255, 255, 100)
+            line_width = 2 if creature.combat_engaged else 1
             pygame.draw.line(
                 screen,
-                (*color[:3], 100),  # Semi-transparent
+                line_color,
                 screen_pos,
                 target_screen_pos,
-                1
+                line_width
             )
     
     def _draw_hp_bar(

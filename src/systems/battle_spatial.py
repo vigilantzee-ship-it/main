@@ -507,6 +507,10 @@ class SpatialBattle:
                     )
                     movement_target = self.arena.get_resource_position(nearest_resource)
                 else:
+                    # No food available at all - force switch back to combat mode
+                    current_state = "combat"
+                    creature.last_behavior_state = "combat"
+                    seeking_food = False
                     movement_target = None
         else:
             # ENHANCED TARGETING SYSTEM
