@@ -190,17 +190,17 @@ class Ability:
             target_defense: Target's defense stat
             
         Returns:
-            Calculated damage value
+            Calculated damage value (minimum of 3)
         """
         if self.ability_type == AbilityType.PHYSICAL:
             # Physical damage formula
             base_damage = self.power + user_attack
-            reduced_damage = max(1, base_damage - (target_defense // 2))
+            reduced_damage = max(3, base_damage - (target_defense // 2))
             return reduced_damage
         elif self.ability_type == AbilityType.SPECIAL:
             # Special damage formula (less affected by defense)
             base_damage = self.power + user_attack
-            reduced_damage = max(1, base_damage - (target_defense // 4))
+            reduced_damage = max(3, base_damage - (target_defense // 4))
             return reduced_damage
         else:
             # Non-damaging ability
@@ -272,7 +272,7 @@ PREDEFINED_ABILITIES = {
         description="Launch a ball of fire at the enemy",
         ability_type=AbilityType.SPECIAL,
         power=60,
-        accuracy=90,
+        accuracy=95,
         cooldown=2,
         energy_cost=10,
         effects=[AbilityEffect(effect_type="damage", value=60)]
@@ -309,7 +309,7 @@ PREDEFINED_ABILITIES = {
         description="Lower enemy's defense",
         ability_type=AbilityType.DEBUFF,
         power=0,
-        accuracy=85,
+        accuracy=95,
         cooldown=4,
         energy_cost=12,
         effects=[AbilityEffect(
@@ -324,7 +324,7 @@ PREDEFINED_ABILITIES = {
         description="A fast attack that goes first",
         ability_type=AbilityType.PHYSICAL,
         power=30,
-        accuracy=95,
+        accuracy=98,
         cooldown=1,
         conditions={'min_speed': 15}
     )

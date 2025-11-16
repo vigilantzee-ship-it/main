@@ -582,7 +582,7 @@ class SpatialBattle:
             ))
         
         # Random variance
-        damage = int(damage * random.uniform(0.85, 1.0))
+        damage = int(damage * random.uniform(0.90, 1.0))
         
         # Critical hit
         if random.random() < 0.0625:
@@ -593,7 +593,7 @@ class SpatialBattle:
                 message="Critical hit!"
             ))
         
-        return max(1, damage)
+        return max(3, damage)
     
     def _get_type_effectiveness(
         self,

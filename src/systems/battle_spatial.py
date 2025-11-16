@@ -262,6 +262,12 @@ class SpatialBattle:
         self.breeding_cooldown: float = 20.0  # Increased from 5.0 to 20.0 seconds for population control
         self.last_breeding_check: float = 0.0
         
+        # Environmental hazards and cooperative activities
+        self.hazard_interval: float = 45.0  # Hazard every 45 seconds
+        self.last_hazard_time: float = 0.0
+        self.cooperative_spawn_interval: float = 30.0  # Spawn group resources every 30 seconds
+        self.last_cooperative_spawn: float = 0.0
+        
         # Performance optimization: Cache ally relationships
         # Key: (creature_id1, creature_id2), Value: is_ally bool
         self._ally_cache: Dict[Tuple[str, str], bool] = {}
@@ -439,6 +445,16 @@ class SpatialBattle:
         if self.current_time - self.last_breeding_check >= self.breeding_cooldown:
             self._check_breeding(alive_creatures)
             self.last_breeding_check = self.current_time
+        
+        # Trigger environmental hazards periodically
+        if self.current_time - self.last_hazard_time >= self.hazard_interval:
+            self._trigger_environmental_hazard(alive_creatures)
+            self.last_hazard_time = self.current_time
+        
+        # Spawn cooperative group resources
+        if self.current_time - self.last_cooperative_spawn >= self.cooperative_spawn_interval:
+            self._spawn_cooperative_resource()
+            self.last_cooperative_spawn = self.current_time
         
         # Process status effects
         for creature in alive_creatures:
@@ -1508,6 +1524,113 @@ class SpatialBattle:
                     
                     # Only one offspring per pair per check
                     break
+    
+    def _trigger_environmental_hazard(self, alive_creatures: List[BattleCreature]):
+        """
+        Trigger a random environmental hazard that affects all creatures.
+        
+        Hazards encourage creatures to work together or find safe zones.
+        """
+        if not alive_creatures:
+            return
+        
+        hazard_types = ['storm', 'heat_wave', 'resource_scarcity']
+        hazard = random.choice(hazard_types)
+        
+        if hazard == 'storm':
+            # Storm damages all creatures slightly, encouraging them to seek shelter together
+            damage = random.randint(3, 8)
+            safe_zone = Vector2D(
+                random.uniform(self.arena.width * 0.2, self.arena.width * 0.8),
+                random.uniform(self.arena.height * 0.2, self.arena.height * 0.8)
+            )
+            safe_radius = min(self.arena.width, self.arena.height) * 0.15
+            
+            affected_count = 0
+            for creature in alive_creatures:
+                distance_to_safe = creature.spatial.position.distance_to(safe_zone)
+                if distance_to_safe > safe_radius:
+                    # Creature takes damage from storm
+                    actual_damage = creature.creature.stats.take_damage(damage)
+                    if actual_damage > 0:
+                        affected_count += 1
+            
+            self._log(f"⚡ STORM! {affected_count} creatures caught outside safe zone took {damage} damage")
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.HAZARD_DAMAGE,
+                message=f"Storm hits the arena! {affected_count} creatures damaged",
+                data={'hazard_type': 'storm', 'damage': damage, 'affected': affected_count}
+            ))
+        
+        elif hazard == 'heat_wave':
+            # Heat wave increases hunger depletion temporarily
+            self._log(f"🔥 HEAT WAVE! All creatures' hunger depletes faster")
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.HAZARD_DAMAGE,
+                message="Heat wave strikes! Hunger increases faster",
+                data={'hazard_type': 'heat_wave', 'duration': 10.0}
+            ))
+            # Temporarily increase hunger depletion for all creatures
+            for creature in alive_creatures:
+                # Reduce hunger by extra amount
+                creature.creature.hunger = max(0, creature.creature.hunger - 5)
+        
+        elif hazard == 'resource_scarcity':
+            # Remove some resources, encouraging cooperation in foraging
+            resources_before = len(self.arena.resources)
+            if resources_before > 0:
+                remove_count = max(1, resources_before // 3)
+                for _ in range(remove_count):
+                    if self.arena.resources:
+                        self.arena.resources.pop()
+                
+                self._log(f"🌾 RESOURCE SCARCITY! {remove_count} food sources disappeared")
+                self._emit_event(BattleEvent(
+                    event_type=BattleEventType.HAZARD_DAMAGE,
+                    message=f"Resource scarcity! {remove_count} food sources vanish",
+                    data={'hazard_type': 'resource_scarcity', 'removed': remove_count}
+                ))
+    
+    def _spawn_cooperative_resource(self):
+        """
+        Spawn a large resource cluster that encourages cooperative gathering.
+        
+        Creates multiple pellets in a small area, rewarding creatures that work together.
+        """
+        # Choose a random location for the resource cluster
+        cluster_center = Vector2D(
+            random.uniform(10, self.arena.width - 10),
+            random.uniform(10, self.arena.height - 10)
+        )
+        
+        # Spawn 3-5 pellets in a cluster
+        cluster_size = random.randint(3, 5)
+        cluster_radius = 5.0
+        
+        for _ in range(cluster_size):
+            # Offset from center
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(0, cluster_radius)
+            position = Vector2D(
+                cluster_center.x + math.cos(angle) * distance,
+                cluster_center.y + math.sin(angle) * distance
+            )
+            position = self.arena.clamp_position(position)
+            
+            # Create a high-quality pellet at the position
+            pellet = create_random_pellet(position.x, position.y, generation=1)
+            pellet.traits.palatability = random.uniform(0.7, 1.0)  # High palatability
+            pellet.traits.toxicity = random.uniform(0.0, 0.2)  # Low toxicity
+            pellet.traits.nutrient_value = random.uniform(25, 35)  # Good nutrients
+            
+            self.arena.add_pellet(pellet)
+        
+        self._log(f"🍎 COOPERATIVE FOOD! Resource cluster of {cluster_size} pellets appeared")
+        self._emit_event(BattleEvent(
+            event_type=BattleEventType.PELLET_SPAWN,
+            message=f"Rich food cluster spawned! {cluster_size} high-quality pellets",
+            data={'cluster_size': cluster_size, 'position': cluster_center.to_tuple()}
+        ))
     
     
     def _end_battle(self):
