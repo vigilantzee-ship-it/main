@@ -110,6 +110,16 @@ class BattleCreature:
         self.current_movement_target: Optional[Vector2D] = None
         self.last_behavior_state: str = "combat"  # Track if seeking food vs combat (start in combat mode)
     
+    def __hash__(self):
+        """Make BattleCreature hashable based on creature ID."""
+        return hash(self.creature.creature_id)
+    
+    def __eq__(self, other):
+        """Compare BattleCreatures by their creature ID."""
+        if not isinstance(other, BattleCreature):
+            return False
+        return self.creature.creature_id == other.creature.creature_id
+    
     def _determine_behavior(self) -> SpatialBehavior:
         """Determine behavior based on creature traits."""
         # Check traits for behavior hints
@@ -214,6 +224,13 @@ class SpatialBattle:
         self.resource_spawn_rate = resource_spawn_rate
         self.time_since_last_resource_spawn: float = 0.0
         
+        # Spatial hash grid for creature proximity queries
+        from ..models.spatial import SpatialHashGrid
+        cell_size = max(5.0, min(20.0, min(arena_width, arena_height) * 0.1))
+        self.creature_grid: SpatialHashGrid['BattleCreature'] = SpatialHashGrid(
+            arena_width, arena_height, cell_size
+        )
+        
         # Living world enhancer for deep simulation
         self.enhancer = living_world_enhancer
         
@@ -263,6 +280,9 @@ class SpatialBattle:
             
             battle_creature = BattleCreature(creature, position)
             spawned.append(battle_creature)
+            
+            # Add to spatial grid
+            self.creature_grid.insert(battle_creature, battle_creature.spatial.position)
             
             self._emit_event(BattleEvent(
                 event_type=BattleEventType.CREATURE_SPAWN,
@@ -371,6 +391,8 @@ class SpatialBattle:
                 creature.creature.stats.hp = 0
                 self.death_count += 1
                 self._log(f"{creature.creature.name} starved to death!")
+                # Remove from spatial grid
+                self.creature_grid.remove(creature)
                 # Spawn pellets from starved creature
                 self._spawn_pellets_from_creature(creature)
                 self._emit_event(BattleEvent(
@@ -476,10 +498,19 @@ class SpatialBattle:
                 # Check if current target is too far and there's a closer target
                 current_distance = creature.spatial.distance_to(creature.target.spatial)
                 if current_distance > creature.target_retention_distance:
-                    # Look for a closer target
-                    other_non_target = [c for c in other_creatures if c != creature.target]
-                    if other_non_target:
-                        closest_distance = min(creature.spatial.distance_to(c.spatial) for c in other_non_target)
+                    # Use spatial grid to find nearby creatures efficiently
+                    nearby_creatures = self.creature_grid.query_radius(
+                        creature.spatial.position,
+                        creature.target_retention_distance,
+                        exclude={creature, creature.target}
+                    )
+                    # Only retarget if there's a significantly closer target
+                    if nearby_creatures:
+                        closest = min(
+                            nearby_creatures,
+                            key=lambda c: creature.spatial.distance_to(c.spatial)
+                        )
+                        closest_distance = creature.spatial.distance_to(closest.spatial)
                         # Only retarget if significantly closer (20% threshold)
                         if closest_distance < current_distance * 0.8:
                             should_retarget = True
@@ -488,23 +519,32 @@ class SpatialBattle:
                 # Carnivore predator logic: prioritize weak/injured/herbivore targets
                 selected_target = None
                 if creature.creature.has_trait("Carnivore") and other_creatures:
-                    # Find weakest/most injured target
-                    def target_priority(target: BattleCreature) -> float:
-                        """Calculate target priority (lower = more desirable)."""
-                        distance = creature.spatial.distance_to(target.spatial)
-                        hp_ratio = target.creature.stats.hp / max(1, target.creature.stats.max_hp)
-                        
-                        # Prioritize injured creatures (low HP ratio)
-                        injury_bonus = (1.0 - hp_ratio) * 30.0
-                        
-                        # Prioritize herbivores (easier prey)
-                        prey_bonus = 20.0 if target.creature.has_trait("Herbivore") else 0.0
-                        
-                        # Prefer closer targets
-                        # Lower score = higher priority
-                        return distance - injury_bonus - prey_bonus
+                    # Use spatial grid to find nearby potential targets
+                    search_radius = 50.0  # Max targeting range for carnivores
+                    nearby_targets = self.creature_grid.query_radius(
+                        creature.spatial.position,
+                        search_radius,
+                        exclude={creature}
+                    )
                     
-                    selected_target = min(other_creatures, key=target_priority)
+                    if nearby_targets:
+                        # Find weakest/most injured target
+                        def target_priority(target: BattleCreature) -> float:
+                            """Calculate target priority (lower = more desirable)."""
+                            distance = creature.spatial.distance_to(target.spatial)
+                            hp_ratio = target.creature.stats.hp / max(1, target.creature.stats.max_hp)
+                            
+                            # Prioritize injured creatures (low HP ratio)
+                            injury_bonus = (1.0 - hp_ratio) * 30.0
+                            
+                            # Prioritize herbivores (easier prey)
+                            prey_bonus = 20.0 if target.creature.has_trait("Herbivore") else 0.0
+                            
+                            # Prefer closer targets
+                            # Lower score = higher priority
+                            return distance - injury_bonus - prey_bonus
+                        
+                        selected_target = min(nearby_targets, key=target_priority)
                 
                 # Use living world enhancer for personality-driven target selection if available
                 if not selected_target and self.enhancer:
@@ -577,6 +617,9 @@ class SpatialBattle:
             
             # Keep within bounds
             creature.spatial.position = self.arena.clamp_position(creature.spatial.position)
+            
+            # Update spatial grid with new position
+            self.creature_grid.update(creature, creature.spatial.position)
             
             new_pos = (creature.spatial.position.x, creature.spatial.position.y)
             if old_pos != new_pos:
@@ -769,6 +812,9 @@ class SpatialBattle:
             if was_alive_before_damage and not defender.is_alive():
                 self.death_count += 1
                 
+                # Remove from spatial grid
+                self.creature_grid.remove(defender)
+                
                 # Record kill for living world
                 if self.enhancer:
                     location = (defender.spatial.position.x, defender.spatial.position.y)
@@ -908,12 +954,17 @@ class SpatialBattle:
         if killer.creature.can_eat_food_type("creature"):
             potential_consumers.append(killer)
         
-        # Then check other nearby creatures
-        for creature in self._creatures:
-            if creature.is_alive() and creature != killer:
-                distance = creature.spatial.distance_to(corpse.spatial)
-                if distance <= CONSUMPTION_RADIUS and creature.creature.can_eat_food_type("creature"):
-                    potential_consumers.append(creature)
+        # Use spatial grid to find other nearby creatures
+        nearby_creatures = self.creature_grid.query_radius(
+            corpse.spatial.position,
+            CONSUMPTION_RADIUS,
+            exclude={killer, corpse}
+        )
+        
+        # Filter for those that can eat creatures
+        for creature in nearby_creatures:
+            if creature.is_alive() and creature.creature.can_eat_food_type("creature"):
+                potential_consumers.append(creature)
         
         # Allow one creature to consume the corpse
         if potential_consumers:
@@ -981,13 +1032,18 @@ class SpatialBattle:
                 continue
             
             # Check if pellet can reproduce
-            # Count nearby pellets for density calculation
+            # Count nearby pellets for density calculation using spatial grid
             pellet_pos = Vector2D(pellet.x, pellet.y)
             DENSITY_RADIUS = 20.0
-            nearby_count = sum(
-                1 for p in self.arena.pellets
-                if pellet_pos.distance_to(Vector2D(p.x, p.y)) <= DENSITY_RADIUS
+            # Use exact distance for density checks
+            nearby_pellets = self.arena.spatial_grid.query_radius(
+                pellet_pos,
+                DENSITY_RADIUS,
+                exclude={pellet},
+                exact_distance=True,
+                get_position=lambda p: Vector2D(p.x, p.y) if hasattr(p, 'x') else p
             )
+            nearby_count = len(nearby_pellets) + 1  # +1 to include the pellet itself
             
             # Attempt reproduction
             CARRYING_CAPACITY = 50  # Max pellets in local area
@@ -1027,67 +1083,83 @@ class SpatialBattle:
         # Breeding range scales with arena size (20% of smaller dimension)
         breeding_range = min(self.arena.width, self.arena.height) * 0.3
         
-        for i, creature1 in enumerate(alive_creatures):
-            # Skip if creature cannot breed
-            if not creature1.creature.can_breed():
+        # Track which creatures have already bred this check
+        bred_this_cycle = set()
+        
+        for creature1 in alive_creatures:
+            # Skip if creature cannot breed or already bred this cycle
+            if not creature1.creature.can_breed() or creature1 in bred_this_cycle:
                 continue
             
-            # Check for nearby potential mates
-            for creature2 in alive_creatures[i+1:]:
-                # Skip if second creature cannot breed
-                if not creature2.creature.can_breed():
+            # Use spatial grid to find nearby potential mates
+            nearby_creatures = self.creature_grid.query_radius(
+                creature1.spatial.position,
+                breeding_range,
+                exclude={creature1}
+            )
+            
+            # Check nearby creatures for breeding
+            for creature2 in nearby_creatures:
+                # Skip if second creature cannot breed or already bred
+                if not creature2.creature.can_breed() or creature2 in bred_this_cycle:
                     continue
                 
-                # Check distance
-                distance = creature1.spatial.distance_to(creature2.spatial)
-                if distance <= breeding_range:
-                    # Attempt breeding
-                    offspring = self.breeding_system.breed(
-                        creature1.creature,
-                        creature2.creature,
-                        birth_time=self.current_time
-                    )
+                # Attempt breeding
+                offspring = self.breeding_system.breed(
+                    creature1.creature,
+                    creature2.creature,
+                    birth_time=self.current_time
+                )
+                
+                if offspring:
+                    # Mark both parents as having bred this cycle
+                    bred_this_cycle.add(creature1)
+                    bred_this_cycle.add(creature2)
                     
-                    if offspring:
-                        # Record breeding for living world
-                        if self.enhancer:
-                            self.enhancer.on_breeding(
-                                creature1.creature,
-                                creature2.creature,
-                                offspring
-                            )
-                        
-                        # Spawn offspring near parents
-                        spawn_pos = Vector2D(
-                            (creature1.spatial.position.x + creature2.spatial.position.x) / 2,
-                            (creature1.spatial.position.y + creature2.spatial.position.y) / 2
+                    # Record breeding for living world
+                    if self.enhancer:
+                        self.enhancer.on_breeding(
+                            creature1.creature,
+                            creature2.creature,
+                            offspring
                         )
-                        # Add small random offset
-                        spawn_pos.x += random.uniform(-3, 3)
-                        spawn_pos.y += random.uniform(-3, 3)
-                        spawn_pos = self.arena.clamp_position(spawn_pos)
-                        
-                        # Create battle creature and add to population
-                        battle_offspring = BattleCreature(offspring, spawn_pos)
-                        self._creatures.append(battle_offspring)
-                        self.birth_count += 1
-                        
-                        self._log(f"BIRTH! {creature1.creature.name} and {creature2.creature.name} had offspring: {offspring.name}")
-                        self._emit_event(BattleEvent(
-                            event_type=BattleEventType.CREATURE_BIRTH,
-                            actor=battle_offspring,
-                            message=f"{offspring.name} was born! Parents: {creature1.creature.name} & {creature2.creature.name}",
-                            data={
-                                'parent1': creature1.creature.name,
-                                'parent2': creature2.creature.name,
-                                'position': spawn_pos.to_tuple(),
-                                'hue': offspring.hue,
-                                'strain_id': offspring.strain_id
-                            }
-                        ))
-                        
-                        # Only one offspring per pair per check
-                        break
+                    
+                    # Spawn offspring near parents
+                    spawn_pos = Vector2D(
+                        (creature1.spatial.position.x + creature2.spatial.position.x) / 2,
+                        (creature1.spatial.position.y + creature2.spatial.position.y) / 2
+                    )
+                    # Add small random offset
+                    spawn_pos.x += random.uniform(-3, 3)
+                    spawn_pos.y += random.uniform(-3, 3)
+                    spawn_pos = self.arena.clamp_position(spawn_pos)
+                    
+                    # Create battle creature and add to population
+                    battle_offspring = BattleCreature(offspring, spawn_pos)
+                    self._creatures.append(battle_offspring)
+                    
+                    # Add offspring to spatial grid
+                    self.creature_grid.insert(battle_offspring, battle_offspring.spatial.position)
+                    
+                    self.birth_count += 1
+                    
+                    self._log(f"BIRTH! {creature1.creature.name} and {creature2.creature.name} had offspring: {offspring.name}")
+                    self._emit_event(BattleEvent(
+                        event_type=BattleEventType.CREATURE_BIRTH,
+                        actor=battle_offspring,
+                        message=f"{offspring.name} was born! Parents: {creature1.creature.name} & {creature2.creature.name}",
+                        data={
+                            'parent1': creature1.creature.name,
+                            'parent2': creature2.creature.name,
+                            'position': spawn_pos.to_tuple(),
+                            'hue': offspring.hue,
+                            'strain_id': offspring.strain_id
+                        }
+                    ))
+                    
+                    # Only one offspring per pair per check
+                    break
+    
     
     def _end_battle(self):
         """End the battle when population has collapsed."""

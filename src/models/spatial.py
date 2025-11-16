@@ -6,11 +6,13 @@ in a 2D arena.
 """
 
 import math
-from typing import Tuple, Optional, List, Union, TYPE_CHECKING
+from typing import Tuple, Optional, List, Union, TYPE_CHECKING, Dict, Set, TypeVar, Generic
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from .pellet import Pellet
+
+T = TypeVar('T')
 
 
 @dataclass
@@ -138,14 +140,23 @@ class Arena:
         hazards: List of hazard positions
         resources: List of resource positions (Vector2D) or Pellet objects
         pellets: List of Pellet agents (same as resources but typed)
+        spatial_grid: Spatial hash grid for efficient proximity queries
     """
     
-    def __init__(self, width: float = 100.0, height: float = 100.0):
+    def __init__(self, width: float = 100.0, height: float = 100.0, cell_size: Optional[float] = None):
         self.width = width
         self.height = height
         self.hazards: List[Vector2D] = []
         # Support both legacy Vector2D resources and new Pellet agents
         self.resources: List[Union[Vector2D, 'Pellet']] = []
+        
+        # Spatial hash grid for efficient proximity queries
+        # Default cell size is ~10% of smaller dimension, clamped between 5 and 20
+        if cell_size is None:
+            cell_size = max(5.0, min(20.0, min(width, height) * 0.1))
+        self.spatial_grid: SpatialHashGrid[Union[Vector2D, 'Pellet']] = SpatialHashGrid(
+            width, height, cell_size
+        )
     
     @property
     def pellets(self) -> List['Pellet']:
@@ -184,6 +195,9 @@ class Arena:
             resource: Either a Vector2D position or a Pellet object
         """
         self.resources.append(resource)
+        # Add to spatial grid
+        position = self.get_resource_position(resource)
+        self.spatial_grid.insert(resource, position)
     
     def add_pellet(self, pellet: 'Pellet'):
         """
@@ -193,6 +207,9 @@ class Arena:
             pellet: Pellet object to add
         """
         self.resources.append(pellet)
+        # Add to spatial grid
+        position = Vector2D(pellet.x, pellet.y)
+        self.spatial_grid.insert(pellet, position)
     
     def remove_resource(self, resource: Union[Vector2D, 'Pellet']) -> bool:
         """
@@ -206,6 +223,8 @@ class Arena:
         """
         try:
             self.resources.remove(resource)
+            # Remove from spatial grid
+            self.spatial_grid.remove(resource)
             return True
         except ValueError:
             return False
@@ -241,7 +260,7 @@ class Arena:
     
     def get_nearest_resource(self, position: Vector2D) -> Optional[Tuple[Union[Vector2D, 'Pellet'], float]]:
         """
-        Find the nearest resource to a position.
+        Find the nearest resource to a position using spatial hash grid.
         
         Returns:
             Tuple of (resource, distance) or None if no resources
@@ -249,5 +268,313 @@ class Arena:
         if not self.resources:
             return None
         
-        nearest = min(self.resources, key=lambda r: position.distance_to(self.get_resource_position(r)))
-        return (nearest, position.distance_to(self.get_resource_position(nearest)))
+        # Use spatial grid for efficient nearest neighbor search
+        result = self.spatial_grid.query_nearest(
+            position,
+            get_position=self.get_resource_position
+        )
+        return result
+    
+    def query_resources_in_radius(
+        self,
+        position: Vector2D,
+        radius: float,
+        exclude: Optional[Set[Union[Vector2D, 'Pellet']]] = None
+    ) -> List[Union[Vector2D, 'Pellet']]:
+        """
+        Find all resources within a radius using spatial hash grid.
+        
+        Args:
+            position: Center position to search from
+            radius: Search radius
+            exclude: Optional set of resources to exclude
+            
+        Returns:
+            List of resources within the radius
+        """
+        return self.spatial_grid.query_radius(position, radius, exclude)
+    
+    def update_resource_position(self, resource: Union[Vector2D, 'Pellet']):
+        """
+        Update a resource's position in the spatial grid.
+        
+        This should be called when a resource moves (e.g., pellet movement).
+        
+        Args:
+            resource: Resource to update
+        """
+        position = self.get_resource_position(resource)
+        self.spatial_grid.update(resource, position)
+
+
+class SpatialHashGrid(Generic[T]):
+    """
+    Spatial hash grid for efficient proximity queries.
+    
+    Divides 2D space into a grid of cells. Each cell contains entities
+    within that region, enabling O(1) cell lookup and O(k) queries where
+    k is the number of entities in nearby cells (typically k << n).
+    
+    This replaces O(n²) all-pairs checks with O(n) broad-phase partitioning.
+    
+    Attributes:
+        cell_size: Size of each grid cell
+        width: Total grid width
+        height: Total grid height
+        grid: Dictionary mapping (grid_x, grid_y) to set of entities
+    """
+    
+    def __init__(self, width: float, height: float, cell_size: float = 10.0):
+        """
+        Initialize spatial hash grid.
+        
+        Args:
+            width: Total width of the spatial area
+            height: Total height of the spatial area
+            cell_size: Size of each grid cell (smaller = more precise, larger = faster)
+        """
+        self.width = width
+        self.height = height
+        self.cell_size = cell_size
+        self.grid: Dict[Tuple[int, int], Set[T]] = {}
+        # Cache for entity positions to detect movement
+        self._entity_cells: Dict[T, Tuple[int, int]] = {}
+    
+    def _get_cell_coords(self, position: Vector2D) -> Tuple[int, int]:
+        """
+        Convert world position to grid cell coordinates.
+        
+        Args:
+            position: World position
+            
+        Returns:
+            Tuple of (cell_x, cell_y)
+        """
+        cell_x = int(position.x / self.cell_size)
+        cell_y = int(position.y / self.cell_size)
+        return (cell_x, cell_y)
+    
+    def clear(self):
+        """Clear all entities from the grid."""
+        self.grid.clear()
+        self._entity_cells.clear()
+    
+    def insert(self, entity: T, position: Vector2D):
+        """
+        Insert an entity at the given position.
+        
+        Args:
+            entity: Entity to insert
+            position: World position of the entity
+        """
+        cell_coords = self._get_cell_coords(position)
+        
+        # Remove from old cell if entity already exists
+        if entity in self._entity_cells:
+            old_coords = self._entity_cells[entity]
+            if old_coords != cell_coords and old_coords in self.grid:
+                self.grid[old_coords].discard(entity)
+        
+        # Add to new cell
+        if cell_coords not in self.grid:
+            self.grid[cell_coords] = set()
+        self.grid[cell_coords].add(entity)
+        self._entity_cells[entity] = cell_coords
+    
+    def remove(self, entity: T):
+        """
+        Remove an entity from the grid.
+        
+        Args:
+            entity: Entity to remove
+        """
+        if entity in self._entity_cells:
+            cell_coords = self._entity_cells[entity]
+            if cell_coords in self.grid:
+                self.grid[cell_coords].discard(entity)
+                if not self.grid[cell_coords]:
+                    del self.grid[cell_coords]
+            del self._entity_cells[entity]
+    
+    def update(self, entity: T, position: Vector2D):
+        """
+        Update an entity's position in the grid.
+        
+        This is more efficient than remove + insert if the entity
+        stays in the same cell.
+        
+        Args:
+            entity: Entity to update
+            position: New world position
+        """
+        new_coords = self._get_cell_coords(position)
+        
+        if entity in self._entity_cells:
+            old_coords = self._entity_cells[entity]
+            if old_coords == new_coords:
+                # Still in same cell, no update needed
+                return
+            
+            # Remove from old cell
+            if old_coords in self.grid:
+                self.grid[old_coords].discard(entity)
+                if not self.grid[old_coords]:
+                    del self.grid[old_coords]
+        
+        # Add to new cell
+        if new_coords not in self.grid:
+            self.grid[new_coords] = set()
+        self.grid[new_coords].add(entity)
+        self._entity_cells[entity] = new_coords
+    
+    def query_radius(
+        self,
+        position: Vector2D,
+        radius: float,
+        exclude: Optional[Set[T]] = None,
+        exact_distance: bool = False,
+        get_position: Optional[callable] = None
+    ) -> List[T]:
+        """
+        Find all entities within a radius of a position.
+        
+        Args:
+            position: Center position to search from
+            radius: Search radius
+            exclude: Optional set of entities to exclude from results
+            exact_distance: If True, filter by exact distance (slower but more accurate)
+            get_position: Function to get position from entity (required if exact_distance=True)
+            
+        Returns:
+            List of entities within the radius (or bounding box if exact_distance=False)
+        """
+        exclude = exclude or set()
+        results = []
+        seen = set()  # Track entities we've already added
+        
+        # Calculate which cells to check (bounding box around radius)
+        min_cell_x = int((position.x - radius) / self.cell_size)
+        max_cell_x = int((position.x + radius) / self.cell_size)
+        min_cell_y = int((position.y - radius) / self.cell_size)
+        max_cell_y = int((position.y + radius) / self.cell_size)
+        
+        # Check each cell in the bounding box
+        for cell_x in range(min_cell_x, max_cell_x + 1):
+            for cell_y in range(min_cell_y, max_cell_y + 1):
+                cell_coords = (cell_x, cell_y)
+                if cell_coords in self.grid:
+                    for entity in self.grid[cell_coords]:
+                        if entity not in exclude and entity not in seen:
+                            # Optionally filter by exact distance
+                            if exact_distance:
+                                # Get entity position
+                                if get_position:
+                                    entity_pos = get_position(entity)
+                                elif hasattr(entity, 'position'):
+                                    entity_pos = entity.position
+                                elif hasattr(entity, 'spatial'):
+                                    entity_pos = entity.spatial.position
+                                elif isinstance(entity, Vector2D):
+                                    entity_pos = entity
+                                else:
+                                    continue
+                                
+                                if position.distance_to(entity_pos) <= radius:
+                                    results.append(entity)
+                                    seen.add(entity)
+                            else:
+                                results.append(entity)
+                                seen.add(entity)
+        
+        return results
+    
+    def query_nearest(
+        self,
+        position: Vector2D,
+        max_distance: float = float('inf'),
+        exclude: Optional[Set[T]] = None,
+        get_position: Optional[callable] = None
+    ) -> Optional[Tuple[T, float]]:
+        """
+        Find the nearest entity to a position.
+        
+        Args:
+            position: Position to search from
+            max_distance: Maximum search distance
+            exclude: Optional set of entities to exclude
+            get_position: Function to get position from entity (if not SpatialEntity)
+            
+        Returns:
+            Tuple of (nearest_entity, distance) or None
+        """
+        exclude = exclude or set()
+        
+        # Start with cells near the position and expand outward
+        search_radius = min(max_distance, self.cell_size * 2)
+        max_search_radius = max_distance
+        
+        nearest_entity = None
+        nearest_distance = float('inf')
+        
+        while search_radius <= max_search_radius:
+            candidates = self.query_radius(position, search_radius, exclude)
+            
+            for entity in candidates:
+                # Get entity position
+                if get_position:
+                    entity_pos = get_position(entity)
+                elif hasattr(entity, 'position'):
+                    entity_pos = entity.position
+                elif hasattr(entity, 'spatial'):
+                    entity_pos = entity.spatial.position
+                else:
+                    continue
+                
+                distance = position.distance_to(entity_pos)
+                if distance < nearest_distance and distance <= max_distance:
+                    nearest_distance = distance
+                    nearest_entity = entity
+            
+            # If we found something, we can stop
+            if nearest_entity is not None:
+                break
+            
+            # Expand search radius
+            if search_radius >= max_search_radius:
+                break
+            search_radius = min(search_radius * 2, max_search_radius)
+        
+        if nearest_entity is not None:
+            return (nearest_entity, nearest_distance)
+        return None
+    
+    def query_count_in_radius(
+        self,
+        position: Vector2D,
+        radius: float,
+        exclude: Optional[Set[T]] = None
+    ) -> int:
+        """
+        Count entities within a radius (optimized for density checks).
+        
+        Args:
+            position: Center position
+            radius: Search radius
+            exclude: Optional set of entities to exclude
+            
+        Returns:
+            Count of entities within radius
+        """
+        return len(self.query_radius(position, radius, exclude))
+    
+    def get_all_entities(self) -> List[T]:
+        """
+        Get all entities in the grid.
+        
+        Returns:
+            List of all entities
+        """
+        entities = []
+        for cell_entities in self.grid.values():
+            entities.extend(cell_entities)
+        return entities
