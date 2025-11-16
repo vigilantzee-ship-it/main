@@ -10,6 +10,7 @@ from ..models.creature import Creature
 from ..models.trait import Trait
 from ..models.stats import Stats
 from ..models.genetics import GeneticsEngine
+from .trait_injection import TraitInjectionSystem, InjectionConfig
 
 
 class Breeding:
@@ -29,7 +30,8 @@ class Breeding:
     def __init__(
         self,
         mutation_rate: float = 0.1,
-        trait_inheritance_chance: float = 0.8
+        trait_inheritance_chance: float = 0.8,
+        injection_system: Optional[TraitInjectionSystem] = None
     ):
         """
         Initialize the Breeding system.
@@ -37,12 +39,14 @@ class Breeding:
         Args:
             mutation_rate: Base mutation probability
             trait_inheritance_chance: Probability of inheriting each parent trait
+            injection_system: Optional trait injection system for random traits
         """
         self.mutation_rate = mutation_rate
         self.trait_inheritance_chance = trait_inheritance_chance
         self.trait_inheritance_rules = {}
         self.genetics_engine = GeneticsEngine(mutation_rate=mutation_rate)
         self.generation_counter = 0
+        self.injection_system = injection_system
     
     def breed(
         self,
@@ -77,6 +81,16 @@ class Breeding:
             parent2,
             generation=self.generation_counter
         )
+        
+        # Check for random trait injection
+        if self.injection_system is not None:
+            injected_trait = self.injection_system.inject_breeding_trait(
+                parent1,
+                parent2,
+                self.generation_counter
+            )
+            if injected_trait is not None:
+                inherited_traits.append(injected_trait)
         
         # Inherit stats using genetics engine (blends both parents)
         child_stats = self.genetics_engine.combine_stats(parent1, parent2)
