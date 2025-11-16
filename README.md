@@ -130,6 +130,7 @@ This project is developed by three specialist agents working in coordination:
 - **Data & Systems Agent** - Manages game state, persistence, and support systems ([Issue #13](https://github.com/dbmelville2-jpg/evobattle/issues/13))
 
 **Important Documentation:**
+- [**📚 Complete Documentation Index**](docs/DOCUMENTATION_INDEX.md) - Full guide to all documentation
 - [**Battle Story Mode Documentation**](BATTLE_STORY_MODE_DOCUMENTATION.md) - **NEW!** AI-powered battle narratives
 - [**Living World Documentation**](LIVING_WORLD_DOCUMENTATION.md) - Creature histories, skills, personalities, relationships
 - [Battle System Documentation](BATTLE_SYSTEM_DOCUMENTATION.md) - Complete battle system guide
@@ -140,6 +141,8 @@ This project is developed by three specialist agents working in coordination:
 - [Agent Coordination Guide](AGENT_COORDINATION.md) - Team standards, interface contracts, and integration goals
 - [Integration Checklist](INTEGRATION_CHECKLIST.md) - Track implementation progress and integration milestones
 - [Project Architect Vision](https://github.com/dbmelville2-jpg/evobattle/issues/2) - Overall project leadership and vision
+
+📁 **Note:** Historical implementation documents, tuning guides, and architecture notes have been organized in [docs/archive/](docs/archive/) for reference.
 
 ### Running Examples
 
