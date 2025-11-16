@@ -125,6 +125,58 @@ EXPLORER = Trait(
     rarity="rare"
 )
 
+PERSISTENT = Trait(
+    name="Persistent",
+    description="Sticks with tasks longer, less easily distracted",
+    trait_type="personality",
+    defense_modifier=1.05,  # Patience provides resilience
+    rarity="common"
+)
+
+DISTRACTIBLE = Trait(
+    name="Distractible",
+    description="Easily distracted, switches focus frequently",
+    trait_type="personality",
+    speed_modifier=1.05,  # Quick to react
+    defense_modifier=0.95,  # Less focused defense
+    rarity="common"
+)
+
+TUNNEL_VISION = Trait(
+    name="Tunnel Vision",
+    description="Extremely focused on current task, ignores distractions",
+    trait_type="personality",
+    strength_modifier=1.1,  # Single-minded determination
+    defense_modifier=0.9,  # Vulnerable to flanking
+    rarity="uncommon"
+)
+
+OPPORTUNIST = Trait(
+    name="Opportunist",
+    description="Quickly switches to better opportunities, adaptable",
+    trait_type="personality",
+    speed_modifier=1.1,
+    rarity="uncommon"
+)
+
+FOCUSED = Trait(
+    name="Focused",
+    description="Maintains concentration, resistant to distractions",
+    trait_type="personality",
+    strength_modifier=1.05,
+    defense_modifier=1.05,
+    rarity="uncommon"
+)
+
+FICKLE = Trait(
+    name="Fickle",
+    description="Changes mind frequently, unreliable commitments",
+    trait_type="personality",
+    speed_modifier=1.08,
+    strength_modifier=0.95,
+    rarity="common"
+)
+
 
 # ===========================
 # SURVIVAL TRAITS
@@ -214,7 +266,13 @@ PERSONALITY_TRAITS = [
     CAUTIOUS,
     AGGRESSIVE,
     WANDERER,
-    EXPLORER
+    EXPLORER,
+    PERSISTENT,
+    DISTRACTIBLE,
+    TUNNEL_VISION,
+    OPPORTUNIST,
+    FOCUSED,
+    FICKLE
 ]
 
 SURVIVAL_TRAITS = [

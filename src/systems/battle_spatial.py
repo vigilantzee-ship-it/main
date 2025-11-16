@@ -14,7 +14,7 @@ Enhanced with:
 - Environmental simulation (weather, terrain, day/night, hazards)
 """
 
-from typing import List, Optional, Dict, Callable, Tuple
+from typing import List, Optional, Dict, Callable, Tuple, Any
 from enum import Enum
 from functools import lru_cache
 import random
@@ -33,6 +33,7 @@ from ..models.combat_targeting import CombatTargetingSystem, CombatContext, Targ
 from ..models.relationships import RelationshipType
 from ..models.injury_tracker import DamageType
 from ..models.environment import Environment, EnvironmentalHazard, HazardType
+from ..models.attention import AttentionManager, StimulusType, create_attention_manager_from_traits
 from .breeding import Breeding
 from .grass_growth_system import GrassGrowthSystem
 
@@ -62,6 +63,8 @@ class BattleEventType(Enum):
     PELLET_REPRODUCE = "pellet_reproduce"
     PELLET_CONSUMED = "pellet_consumed"
     PELLET_DEATH = "pellet_death"
+    # Attention/focus events
+    ATTENTION_CHANGE = "attention_change"
 
 
 class BattleEvent:
@@ -116,7 +119,10 @@ class BattleCreature:
         self.last_attack_time: float = 0
         self.attack_cooldown: float = 0.5  # Reduced from 1.0 to 0.5 for more dynamic combat
         
-        # Target retention to prevent rapid retargeting
+        # Attention and focus management
+        self.attention = create_attention_manager_from_traits(creature.traits)
+        
+        # Target retention to prevent rapid retargeting (now managed by attention system)
         self.target_retention_distance: float = 15.0  # Keep target if within this distance
         self.min_retarget_time: float = 0.5  # Minimum seconds before changing target
         self.last_retarget_time: float = 0.0
@@ -174,6 +180,18 @@ class BattleCreature:
     def is_alive(self) -> bool:
         """Check if creature is still alive."""
         return self.creature.is_alive()
+    
+    def get_attention_debug_info(self, current_time: float) -> Dict[str, Any]:
+        """
+        Get debug information about creature's attention state.
+        
+        Args:
+            current_time: Current simulation time
+            
+        Returns:
+            Dictionary with attention debug information
+        """
+        return self.attention.get_debug_info(current_time)
     
     def can_attack(self, current_time: float) -> bool:
         """Check if creature can attack based on cooldown."""
@@ -534,32 +552,148 @@ class SpatialBattle:
         all_alive: List[BattleCreature],
         delta_time: float
     ):
-        """Update a single creature's AI, movement, and combat."""
+        """Update a single creature's AI, movement, and combat using attention system."""
         # Get other creatures as potential targets/allies
         other_creatures = [c for c in all_alive if c != creature]
         
         # Convert to spatial entities for behavior system
         other_entities = [c.spatial for c in other_creatures]
         
-        # Check if creature is hungry and should prioritize food
-        # Use hysteresis to prevent rapid behavior flipping at threshold
-        HUNGER_THRESHOLD_LOW = 35  # Start seeking food
-        HUNGER_THRESHOLD_HIGH = 50  # Stop seeking food (buffer zone)
+        # === ATTENTION SYSTEM: Evaluate all stimuli and determine focus ===
         
-        current_state = "seeking_food" if creature.last_behavior_state == "seeking_food" else "combat"
+        # Calculate priority for each stimulus type
+        stimuli_priorities = {}
         
-        if current_state == "combat" and creature.creature.hunger < HUNGER_THRESHOLD_LOW and len(self.arena.resources) > 0:
-            # Switch to seeking food
-            current_state = "seeking_food"
-        elif current_state == "seeking_food" and (creature.creature.hunger >= HUNGER_THRESHOLD_HIGH or len(self.arena.resources) == 0):
-            # Switch back to combat
-            current_state = "combat"
+        # 1. FORAGING - Priority based on hunger level
+        if len(self.arena.resources) > 0:
+            hunger_urgency = 1.0
+            if creature.creature.hunger < 20:  # Critical hunger
+                hunger_urgency = 3.0
+            elif creature.creature.hunger < 35:  # High hunger
+                hunger_urgency = 2.0
+            elif creature.creature.hunger < 60:  # Moderate hunger
+                hunger_urgency = 1.3
+            else:  # Low hunger
+                hunger_urgency = 0.5
+            
+            stimuli_priorities[StimulusType.FORAGING] = creature.attention.calculate_effective_priority(
+                StimulusType.FORAGING,
+                urgency_modifier=hunger_urgency
+            )
         
-        creature.last_behavior_state = current_state
-        seeking_food = (current_state == "seeking_food")
+        # 2. FLEEING - Priority based on health and threats
+        hp_percent = creature.creature.stats.hp / max(1, creature.creature.stats.max_hp)
+        nearby_enemies = self._get_enemies(creature, other_creatures, self.combat_config.close_combat_range * 2)
+        nearby_allies = self._get_allies(creature, other_creatures, self.combat_config.support_range)
         
-        # Determine movement - prioritize food if hungry
-        if seeking_food:
+        if hp_percent < 0.3 or len(nearby_enemies) > len(nearby_allies) + 2:
+            flee_urgency = 1.0
+            if hp_percent < 0.15:  # Critical health
+                flee_urgency = 3.0
+            elif hp_percent < 0.25:  # Low health
+                flee_urgency = 2.0
+            
+            # Increase urgency if outnumbered
+            if len(nearby_enemies) > len(nearby_allies) + 2:
+                flee_urgency *= 1.5
+            
+            stimuli_priorities[StimulusType.FLEEING] = creature.attention.calculate_effective_priority(
+                StimulusType.FLEEING,
+                urgency_modifier=flee_urgency
+            )
+        
+        # 3. COMBAT - Priority based on nearby enemies and personality
+        potential_targets = self.creature_grid.query_radius(
+            creature.spatial.position,
+            self.combat_config.max_chase_distance,
+            exclude={creature}
+        )
+        
+        # Filter out allies
+        enemies = [t for t in potential_targets if not self._is_ally(creature, t)]
+        
+        if enemies:
+            combat_urgency = 1.0
+            
+            # Check for revenge targets
+            has_revenge_target = False
+            for enemy in enemies:
+                if creature.creature.relationships.has_relationship(
+                    enemy.creature.creature_id,
+                    RelationshipType.REVENGE_TARGET
+                ):
+                    has_revenge_target = True
+                    combat_urgency *= 1.5
+                    break
+            
+            # Check for injured family nearby (protection instinct)
+            for ally in nearby_allies:
+                if creature.creature.relationships.has_relationship(
+                    ally.creature.creature_id,
+                    RelationshipType.PARENT
+                ) or creature.creature.relationships.has_relationship(
+                    ally.creature.creature_id,
+                    RelationshipType.CHILD
+                ):
+                    ally_hp_percent = ally.creature.stats.hp / max(1, ally.creature.stats.max_hp)
+                    if ally_hp_percent < 0.4:
+                        combat_urgency *= 1.8
+                        break
+            
+            stimuli_priorities[StimulusType.COMBAT] = creature.attention.calculate_effective_priority(
+                StimulusType.COMBAT,
+                urgency_modifier=combat_urgency
+            )
+        
+        # 4. HAZARD AVOIDANCE - Priority based on environmental hazards
+        if self.environment and self.environment.hazards:
+            nearest_hazard_dist = float('inf')
+            for hazard in self.environment.hazards:
+                dist = creature.spatial.position.distance_to(hazard.position)
+                if dist < nearest_hazard_dist:
+                    nearest_hazard_dist = dist
+            
+            # High priority if close to hazard
+            if nearest_hazard_dist < 10.0:
+                hazard_urgency = max(1.0, (10.0 - nearest_hazard_dist) / 5.0)
+                stimuli_priorities[StimulusType.HAZARD_AVOIDANCE] = creature.attention.calculate_effective_priority(
+                    StimulusType.HAZARD_AVOIDANCE,
+                    urgency_modifier=hazard_urgency
+                )
+        
+        # 5. EXPLORING - Default low priority
+        if not stimuli_priorities or all(p < 30 for p in stimuli_priorities.values()):
+            stimuli_priorities[StimulusType.EXPLORING] = creature.attention.calculate_effective_priority(
+                StimulusType.EXPLORING
+            )
+        
+        # Track previous focus to detect changes
+        previous_focus = creature.attention.get_current_focus()
+        
+        # Update focus based on stimulus evaluation
+        current_focus = creature.attention.evaluate_and_update_focus(
+            stimuli_priorities,
+            self.current_time
+        )
+        
+        # Emit event if focus changed
+        if current_focus != previous_focus:
+            debug_info = creature.attention.get_debug_info(self.current_time)
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.ATTENTION_CHANGE,
+                actor=creature,
+                message=f"{creature.creature.name} switched focus: {previous_focus.value} → {current_focus.value}",
+                data={
+                    'previous_focus': previous_focus.value,
+                    'new_focus': current_focus.value,
+                    'attention_debug': debug_info
+                }
+            ))
+        
+        # === ACT BASED ON CURRENT FOCUS ===
+        movement_target = None
+        
+        if current_focus == StimulusType.FORAGING:
             # Override behavior to seek best available food
             # Filter resources by whether creature will eat them
             acceptable_resources = []
@@ -596,25 +730,33 @@ class SpatialBattle:
                         key=lambda r: creature.spatial.position.distance_to(self.arena.get_resource_position(r))
                     )
                     movement_target = self.arena.get_resource_position(nearest_resource)
-                else:
-                    # No food available at all - force switch back to combat mode
-                    current_state = "combat"
-                    creature.last_behavior_state = "combat"
-                    seeking_food = False
-                    movement_target = None
-        else:
-            # ENHANCED TARGETING SYSTEM
-            # Determine target using new comprehensive targeting system
+        
+        elif current_focus == StimulusType.FLEEING:
+            # Flee from nearby threats
+            if nearby_enemies:
+                flee_dir = CombatTargetingSystem.get_flee_direction(creature, nearby_enemies)
+                if flee_dir:
+                    flee_distance = 20.0
+                    movement_target = Vector2D(
+                        creature.spatial.position.x + flee_dir[0] * flee_distance,
+                        creature.spatial.position.y + flee_dir[1] * flee_distance
+                    )
+        
+        elif current_focus == StimulusType.COMBAT:
+            # Combat targeting - only retarget if not committed to current target
             should_retarget = False
             
             if not creature.target or not creature.target.is_alive():
                 should_retarget = True
-            elif self.current_time - creature.last_retarget_time >= self.combat_config.retarget_check_interval:
-                # Periodic retarget check
-                current_distance = creature.spatial.distance_to(creature.target.spatial)
-                if current_distance > self.combat_config.max_chase_distance:
-                    # Current target too far - must retarget
-                    should_retarget = True
+            elif not creature.attention.is_committed(self.current_time):
+                # Not committed - can consider retargeting
+                if self.current_time - creature.last_retarget_time >= self.combat_config.retarget_check_interval:
+                    # Periodic retarget check
+                    if creature.target:
+                        current_distance = creature.spatial.distance_to(creature.target.spatial)
+                        if current_distance > self.combat_config.max_chase_distance:
+                            # Current target too far - must retarget
+                            should_retarget = True
             
             if should_retarget:
                 # Build combat context for targeting decisions
@@ -684,53 +826,43 @@ class SpatialBattle:
                         creature.target = selected_target
                         creature.last_retarget_time = self.current_time
             
-            # Check if creature should flee using new system
-            should_flee = False
-            if creature.target:
-                # Build context for flee decision
-                hp_percent = creature.creature.stats.hp / max(1, creature.creature.stats.max_hp)
-                nearby_enemies_count = len(self._get_enemies(creature, other_creatures, self.combat_config.support_range))
-                nearby_allies_count = len(self._get_allies(creature, other_creatures, self.combat_config.support_range))
-                
-                context = CombatContext(
-                    nearby_allies=nearby_allies_count,
-                    nearby_enemies=nearby_enemies_count,
-                    self_hp_percent=hp_percent,
-                    is_outnumbered=(nearby_enemies_count > nearby_allies_count + 1),
-                    has_injured_allies=False,
-                    has_family_nearby=False
+            # Move towards target
+            if creature.target and creature.target.is_alive():
+                movement_target = creature.target.spatial.position
+        
+        elif current_focus == StimulusType.HAZARD_AVOIDANCE:
+            # Move away from nearest hazard
+            if self.environment and self.environment.hazards:
+                nearest_hazard = min(
+                    self.environment.hazards,
+                    key=lambda h: creature.spatial.position.distance_to(h.position)
                 )
-                
-                should_flee = CombatTargetingSystem.should_flee(creature, context)
-            
-            # Determine movement
-            if should_flee and creature.target:
-                # Flee from enemies
-                enemies_nearby = self._get_enemies(creature, other_creatures, self.combat_config.close_combat_range * 2)
-                if enemies_nearby:
-                    flee_dir = CombatTargetingSystem.get_flee_direction(creature, enemies_nearby)
-                    if flee_dir:
-                        flee_distance = 20.0
-                        movement_target = Vector2D(
-                            creature.spatial.position.x + flee_dir[0] * flee_distance,
-                            creature.spatial.position.y + flee_dir[1] * flee_distance
-                        )
-                    else:
-                        movement_target = None
-                else:
-                    movement_target = None
-            else:
-                # Normal movement behavior
-                # Convert resources to Vector2D positions for behavior system
-                resource_positions = [self.arena.get_resource_position(r) for r in self.arena.resources]
-                movement_target = creature.behavior.get_movement_target(
-                    creature.spatial,
-                    creature.target.spatial if creature.target else None,
-                    [],  # No allies in free-for-all
-                    other_entities,
-                    self.arena.hazards,
-                    resource_positions
-                )
+                away_vector = creature.spatial.position - nearest_hazard.position
+                movement_target = creature.spatial.position + away_vector.normalized() * 15.0
+        
+        elif current_focus == StimulusType.EXPLORING:
+            # Random exploration using behavior system
+            resource_positions = [self.arena.get_resource_position(r) for r in self.arena.resources]
+            movement_target = creature.behavior.get_movement_target(
+                creature.spatial,
+                None,  # No target in exploration mode
+                [],
+                other_entities,
+                self.arena.hazards,
+                resource_positions
+            )
+        
+        else:  # IDLE or unknown
+            # Use default behavior
+            resource_positions = [self.arena.get_resource_position(r) for r in self.arena.resources]
+            movement_target = creature.behavior.get_movement_target(
+                creature.spatial,
+                creature.target.spatial if creature.target else None,
+                [],
+                other_entities,
+                self.arena.hazards,
+                resource_positions
+            )
         
         # Move towards target with smooth acceleration
         old_pos = (creature.spatial.position.x, creature.spatial.position.y)
