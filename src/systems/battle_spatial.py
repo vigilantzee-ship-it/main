@@ -103,7 +103,7 @@ class BattleCreature:
         self.creature = creature
         self.spatial = SpatialEntity(
             position=position,
-            radius=1.0,
+            radius=0.6,  # Reduced from 1.0 for smaller collision size
             max_speed=creature.stats.speed / 10.0  # Convert speed stat to spatial speed
         )
         self.behavior = self._determine_behavior()
@@ -637,6 +637,24 @@ class SpatialBattle:
         old_pos = (creature.spatial.position.x, creature.spatial.position.y)
         if movement_target:
             creature.spatial.move_towards(movement_target, delta_time=delta_time)
+            
+            # Apply collision avoidance - check nearby creatures and apply separation forces
+            # Use spatial grid for efficient proximity queries
+            nearby_creatures = self.creature_grid.query_radius(
+                creature.spatial.position,
+                radius=2.5,  # Check creatures within 2.5 units
+                exclude={creature}
+            )
+            
+            # Apply separation force for each nearby creature
+            for nearby in nearby_creatures:
+                if nearby.is_alive():
+                    # Apply separation with moderate strength to avoid jitter
+                    creature.spatial.apply_separation_force(nearby.spatial, strength=1.5)
+            
+            # Apply boundary repulsion to prevent getting stuck on walls
+            self.arena.apply_boundary_repulsion(creature.spatial, margin=3.0, strength=1.2)
+            
             creature.spatial.update(delta_time)
             
             # Keep within bounds

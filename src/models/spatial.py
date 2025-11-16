@@ -128,6 +128,39 @@ class SpatialEntity:
     def is_within_range(self, other: 'SpatialEntity', range_distance: float) -> bool:
         """Check if another entity is within a specific range."""
         return self.distance_to(other) <= range_distance
+    
+    def apply_separation_force(self, other: 'SpatialEntity', strength: float = 2.0):
+        """
+        Apply a separation force to avoid collision with another entity.
+        
+        This creates a repulsive force when entities get too close, helping
+        them navigate around each other smoothly.
+        
+        Args:
+            other: The other entity to separate from
+            strength: How strong the separation force is (higher = stronger push)
+        """
+        distance = self.distance_to(other)
+        min_distance = self.radius + other.radius
+        
+        # Only apply separation if entities are too close
+        if distance < min_distance and distance > 0.01:  # Avoid division by zero
+            # Calculate separation direction (away from other entity)
+            separation_dir = (self.position - other.position).normalized()
+            
+            # Separation strength increases as entities get closer
+            # At min_distance, force is 0; at distance 0, force is at max
+            overlap = min_distance - distance
+            force_magnitude = (overlap / min_distance) * strength
+            
+            # Apply the force to velocity
+            separation_force = separation_dir * force_magnitude
+            self.velocity = self.velocity + separation_force
+            
+            # Clamp velocity to max speed
+            velocity_magnitude = self.velocity.magnitude()
+            if velocity_magnitude > self.max_speed:
+                self.velocity = self.velocity.normalized() * self.max_speed
 
 
 class Arena:
@@ -174,6 +207,55 @@ class Arena:
         x = max(0, min(self.width, position.x))
         y = max(0, min(self.height, position.y))
         return Vector2D(x, y)
+    
+    def apply_boundary_repulsion(self, entity: 'SpatialEntity', margin: float = 2.0, strength: float = 1.0):
+        """
+        Apply a repulsion force to keep entities away from arena boundaries.
+        
+        This creates a gentle push away from walls to prevent creatures from
+        getting stuck at boundaries.
+        
+        Args:
+            entity: The spatial entity to apply repulsion to
+            margin: Distance from boundary where repulsion starts
+            strength: How strong the repulsion force is
+        """
+        repulsion = Vector2D(0, 0)
+        
+        # Check distance to each boundary
+        left_dist = entity.position.x
+        right_dist = self.width - entity.position.x
+        top_dist = entity.position.y
+        bottom_dist = self.height - entity.position.y
+        
+        # Apply repulsion from left boundary
+        if left_dist < margin:
+            force = ((margin - left_dist) / margin) * strength
+            repulsion.x += force
+        
+        # Apply repulsion from right boundary
+        if right_dist < margin:
+            force = ((margin - right_dist) / margin) * strength
+            repulsion.x -= force
+        
+        # Apply repulsion from top boundary
+        if top_dist < margin:
+            force = ((margin - top_dist) / margin) * strength
+            repulsion.y += force
+        
+        # Apply repulsion from bottom boundary
+        if bottom_dist < margin:
+            force = ((margin - bottom_dist) / margin) * strength
+            repulsion.y -= force
+        
+        # Apply the repulsion to entity's velocity
+        if repulsion.magnitude() > 0:
+            entity.velocity = entity.velocity + repulsion
+            
+            # Clamp velocity to max speed
+            velocity_magnitude = entity.velocity.magnitude()
+            if velocity_magnitude > entity.max_speed:
+                entity.velocity = entity.velocity.normalized() * entity.max_speed
     
     def get_random_position(self) -> Vector2D:
         """Get a random position within the arena."""

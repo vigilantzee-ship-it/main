@@ -25,7 +25,7 @@ class CreatureRenderer:
     
     def __init__(
         self,
-        radius: int = 15
+        radius: int = 10
     ):
         """
         Initialize the creature renderer.
