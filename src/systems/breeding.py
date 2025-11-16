@@ -123,8 +123,8 @@ class Breeding:
         """
         Determine which traits the offspring inherits.
         
-        Each parent trait has a chance (default 70-90%) to be inherited.
-        Mutations may modify inherited traits, add new ones, or remove existing ones.
+        DEPRECATED: This method is maintained for backward compatibility.
+        New code should use genetics_engine.combine_traits() directly.
         
         Args:
             parent1: First parent creature
@@ -133,49 +133,19 @@ class Breeding:
         Returns:
             list: Traits to be given to the offspring
         """
-        inherited = []
-        
-        # Combine parent traits
-        all_parent_traits = parent1.traits + parent2.traits
-        
-        # Process each unique trait
-        trait_names = set()
-        for trait in all_parent_traits:
-            # Avoid duplicates
-            if trait.name in trait_names:
-                continue
-            
-            # Check inheritance chance (70-90%)
-            inheritance_roll = random.uniform(0.7, 0.9)
-            if random.random() < inheritance_roll:
-                # Small chance to lose this trait (trait removal mutation)
-                if random.random() < self.mutation_rate * 0.5:
-                    # Trait lost due to mutation
-                    continue
-                
-                # Inherit the trait
-                new_trait = trait  # Could copy if Trait had a copy method
-                
-                # Apply potential mutation (modify existing trait)
-                if random.random() < self.mutation_rate:
-                    new_trait = self.apply_mutation(new_trait)
-                
-                inherited.append(new_trait)
-                trait_names.add(trait.name)
-        
-        # Chance to gain a new trait (trait addition mutation)
-        if random.random() < self.mutation_rate * 0.3:
-            new_trait = self.generate_new_trait()
-            if new_trait and new_trait.name not in trait_names:
-                inherited.append(new_trait)
-        
-        return inherited
+        # Delegate to the advanced genetics engine
+        return self.genetics_engine.combine_traits(
+            parent1,
+            parent2,
+            generation=self.generation_counter
+        )
     
     def _inherit_stats(self, parent1: Creature, parent2: Creature) -> Stats:
         """
         Calculate inherited stats from parents.
         
-        Takes average of parent stats with small random variation.
+        DEPRECATED: This method is maintained for backward compatibility.
+        New code should use genetics_engine.combine_stats() directly.
         
         Args:
             parent1: First parent
@@ -184,84 +154,37 @@ class Breeding:
         Returns:
             Stats for offspring
         """
-        p1_stats = parent1.base_stats
-        p2_stats = parent2.base_stats
-        
-        # Average stats with small variation
-        avg_hp = (p1_stats.max_hp + p2_stats.max_hp) // 2
-        avg_attack = (p1_stats.attack + p2_stats.attack) // 2
-        avg_defense = (p1_stats.defense + p2_stats.defense) // 2
-        avg_speed = (p1_stats.speed + p2_stats.speed) // 2
-        
-        # Apply small random variation (-10% to +10%)
-        variation = 0.1
-        hp = int(avg_hp * random.uniform(1 - variation, 1 + variation))
-        attack = int(avg_attack * random.uniform(1 - variation, 1 + variation))
-        defense = int(avg_defense * random.uniform(1 - variation, 1 + variation))
-        speed = int(avg_speed * random.uniform(1 - variation, 1 + variation))
-        
-        # Ensure minimum values
-        hp = max(10, hp)
-        attack = max(1, attack)
-        defense = max(1, defense)
-        speed = max(1, speed)
-        
-        return Stats(max_hp=hp, attack=attack, defense=defense, speed=speed)
+        # Delegate to the advanced genetics engine
+        return self.genetics_engine.combine_stats(parent1, parent2)
     
     def apply_mutation(self, trait: Trait) -> Trait:
         """
         Apply random mutation to a trait.
         
-        Currently creates a new trait with slightly modified stats.
-        In a more complete implementation, this could:
-        - Modify trait modifiers
-        - Change trait type
-        - Create entirely new traits
+        DEPRECATED: This method is maintained for backward compatibility.
+        New code should use genetics_engine._mutate_trait() directly.
         
         Args:
             trait: The trait to potentially mutate
             
         Returns:
-            The mutated trait (or original if no significant mutation)
+            The mutated trait
         """
-        # Apply small modifier changes
-        mutation_strength = 0.1  # 10% change
-        
-        new_strength = trait.strength_modifier * random.uniform(1 - mutation_strength, 1 + mutation_strength)
-        new_defense = trait.defense_modifier * random.uniform(1 - mutation_strength, 1 + mutation_strength)
-        new_speed = trait.speed_modifier * random.uniform(1 - mutation_strength, 1 + mutation_strength)
-        
-        # Create mutated trait
-        mutated = Trait(
-            name=f"{trait.name}+",  # Mark as mutated
-            description=f"Mutated {trait.description}",
-            trait_type=trait.trait_type,
-            strength_modifier=new_strength,
-            defense_modifier=new_defense,
-            speed_modifier=new_speed,
-            rarity=trait.rarity
-        )
-        
-        return mutated
+        # Delegate to the genetics engine
+        return self.genetics_engine._mutate_trait(trait)
     
     def generate_new_trait(self) -> Optional[Trait]:
         """
         Generate a completely new trait through mutation.
         
-        This represents a beneficial or neutral mutation that introduces
-        a new trait into the gene pool.
+        DEPRECATED: This method is maintained for backward compatibility.
+        New code should use genetics_engine._generate_mutation() directly.
         
         Returns:
             A new trait, or None if generation fails
         """
-        from ..models.ecosystem_traits import ALL_ECOSYSTEM_TRAITS
-        
-        # Select a random trait from available ecosystem traits
-        # In a more advanced system, this could generate truly novel traits
-        if ALL_ECOSYSTEM_TRAITS:
-            return random.choice(ALL_ECOSYSTEM_TRAITS)
-        
-        return None
+        # Delegate to the genetics engine
+        return self.genetics_engine._generate_mutation(self.generation_counter)
     
     def __repr__(self):
         """String representation of the Breeding system."""

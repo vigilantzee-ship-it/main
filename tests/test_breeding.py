@@ -140,7 +140,8 @@ class TestBreeding(unittest.TestCase):
         # Mutated trait should have different modifiers
         # Note: mutation changes stats by ~10%, so check they're different
         self.assertNotEqual(mutated.strength_modifier, 1.0)
-        self.assertTrue(mutated.name.endswith('+'))
+        # GeneticsEngine marks mutations with '*' suffix
+        self.assertTrue(mutated.name.endswith('*'))
 
 
 if __name__ == '__main__':

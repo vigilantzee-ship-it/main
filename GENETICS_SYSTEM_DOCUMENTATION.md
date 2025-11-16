@@ -2,7 +2,20 @@
 
 ## Overview
 
-This update introduces a comprehensive genetics system with dominant/recessive genes, expanded trait categories, and cross-entity interactions between creatures and pellets.
+This document describes the enhanced genetics system with dominant/recessive genes, expanded trait categories, and cross-entity interactions between creatures and pellets.
+
+**NOTE:** For architecture and system boundaries, see [GENETICS_BREEDING_ARCHITECTURE.md](GENETICS_BREEDING_ARCHITECTURE.md)
+
+## System Architecture
+
+The genetics and breeding systems are organized as follows:
+
+- **GeneticsEngine** (`src/models/genetics.py`) - Core Mendelian genetics implementation
+- **PelletGenetics** (`src/models/genetics.py`) - Pellet-specific reproduction genetics
+- **Breeding** (`src/systems/breeding.py`) - High-level breeding orchestration
+- **EvolutionSystem** (`src/models/evolution.py`) - Creature type transformation (separate from breeding)
+
+See [GENETICS_BREEDING_ARCHITECTURE.md](GENETICS_BREEDING_ARCHITECTURE.md) for detailed architecture documentation.
 
 ## Key Features
 
