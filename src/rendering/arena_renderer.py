@@ -114,17 +114,30 @@ class ArenaRenderer:
                 self._draw_resource(screen, resource_pos, bounds, battle.arena)
     
     def _get_arena_bounds(self, screen: pygame.Surface) -> tuple:
-        """Get the screen bounds for the arena."""
+        """
+        Get the screen bounds for the arena.
+        
+        Arena is positioned in the center with margins for UI panels:
+        - Left: GENETIC STRAINS panel (250px)
+        - Right: CREATURES + PELLET ECOSYSTEM panels (250px)
+        - Top: Header/title (80px)
+        - Bottom: Battle Feed (200px)
+        """
         screen_width = screen.get_width()
         screen_height = screen.get_height()
         
-        ui_margin_top = 100
-        ui_margin_side = 50
-        ui_margin_bottom = 150
+        # Left margin for GENETIC STRAINS panel
+        ui_margin_left = 250
+        # Right margin for CREATURES and PELLET ECOSYSTEM panels
+        ui_margin_right = 250
+        # Top margin for header/title
+        ui_margin_top = 80
+        # Bottom margin for Battle Feed
+        ui_margin_bottom = 200
         
-        x = ui_margin_side
+        x = ui_margin_left
         y = ui_margin_top
-        width = screen_width - (ui_margin_side * 2)
+        width = screen_width - ui_margin_left - ui_margin_right
         height = screen_height - ui_margin_top - ui_margin_bottom
         
         return (x, y, width, height)
