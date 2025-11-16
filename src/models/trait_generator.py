@@ -377,7 +377,12 @@ class TraitGenerator:
                 'attack_bonus': random.uniform(0.05, 0.2),
                 'critical_hit_chance': random.uniform(1.1, 1.3),
                 'damage_multiplier': random.uniform(1.05, 1.15),
-                'armor_penetration': random.uniform(0.1, 0.3)
+                'armor_penetration': random.uniform(0.1, 0.3),
+                'bleed_on_hit': random.choice([True, False]),
+                'poison_on_hit': random.uniform(0.3, 1.0),
+                'lifesteal': random.uniform(0.1, 0.5),
+                'execute_bonus': random.uniform(0.5, 1.5),
+                'multi_strike': random.randint(2, 3)
             }
         elif category == 'defensive':
             possible_effects = {
