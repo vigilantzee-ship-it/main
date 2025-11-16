@@ -233,6 +233,175 @@ POWERFUL_TRAIT = Trait(
 )
 
 # ============================================================================
+# LETHAL COMBAT TRAITS - High-risk, high-reward combat traits
+# ============================================================================
+
+BERSERKER_TRAIT = Trait(
+    name="Berserker",
+    description="Rages when wounded, trading defense for pure carnage",
+    trait_type="offensive",
+    strength_modifier=1.0,
+    speed_modifier=1.0,
+    defense_modifier=0.7,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'attack_bonus_below_30_hp': 1.0,  # +100% attack when below 30% HP
+        'cannot_retreat': True,
+        'rage_threshold': 0.3
+    }
+)
+
+EXECUTIONER_TRAIT = Trait(
+    name="Executioner",
+    description="Finishes the weak with ruthless efficiency",
+    trait_type="offensive",
+    strength_modifier=1.1,
+    speed_modifier=1.0,
+    defense_modifier=1.0,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'execute_bonus': 1.5,  # +150% damage to targets below 40% HP
+        'execute_threshold': 0.4,
+        'immune_to_fear': True
+    }
+)
+
+BLOODTHIRSTY_TRAIT = Trait(
+    name="Bloodthirsty",
+    description="Damage increases with each kill in battle",
+    trait_type="offensive",
+    strength_modifier=1.05,
+    speed_modifier=1.05,
+    defense_modifier=0.95,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'damage_per_kill': 0.15,  # +15% damage per kill
+        'max_kill_stacks': 5,
+        'resets_on_battle_end': True,
+        'targets_injured': True
+    }
+)
+
+BRUTAL_TRAIT = Trait(
+    name="Brutal",
+    description="Ignores armor and causes bleeding wounds",
+    trait_type="offensive",
+    strength_modifier=1.5,
+    speed_modifier=0.95,
+    defense_modifier=0.95,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'armor_penetration': 0.5,  # Ignores 50% of target's armor/defense
+        'bleed_on_hit': True,
+        'bleed_damage': 3  # Damage over time
+    }
+)
+
+ASSASSIN_TRAIT = Trait(
+    name="Assassin",
+    description="Deadly from the shadows, vulnerable when exposed",
+    trait_type="offensive",
+    strength_modifier=1.1,
+    speed_modifier=1.2,
+    defense_modifier=0.7,
+    rarity="rare",
+    dominance="recessive",
+    interaction_effects={
+        'ambush_damage': 2.0,  # +200% damage on first strike/ambush
+        'counter_vulnerability': 2.0,  # Receives double damage if counter-attacked
+        'stealth_movement': True,
+        'first_strike': True
+    }
+)
+
+APEX_PREDATOR_TRAIT = Trait(
+    name="Apex Predator",
+    description="Grows stronger with each unique kill, inspiring fear",
+    trait_type="offensive",
+    strength_modifier=1.1,
+    speed_modifier=1.1,
+    defense_modifier=1.05,
+    rarity="legendary",
+    dominance="dominant",
+    interaction_effects={
+        'stats_per_unique_kill': 0.2,  # +20% stats per unique strain killed
+        'fear_aura': True,
+        'fear_radius': 50.0,
+        'prey_tracking': True
+    }
+)
+
+RECKLESS_FURY_TRAIT = Trait(
+    name="Reckless Fury",
+    description="Overwhelming offense at the cost of safety",
+    trait_type="offensive",
+    strength_modifier=1.6,
+    speed_modifier=1.1,
+    defense_modifier=0.5,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'self_damage_chance': 0.2,  # 20% chance to hurt self on each attack
+        'self_damage_amount': 5,
+        'cannot_block': True,
+        'cannot_parry': True
+    }
+)
+
+TOXIC_TRAIT = Trait(
+    name="Toxic",
+    description="All attacks inflict stacking poison",
+    trait_type="offensive",
+    strength_modifier=1.1,
+    speed_modifier=1.0,
+    defense_modifier=0.9,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'poison_on_hit': 1.0,  # 100% chance to poison
+        'poison_damage': 2,  # Damage per tick
+        'poison_stacks': 5,  # Max stacks
+        'healing_reduction': 0.3  # Reduced healing received
+    }
+)
+
+FRENZIED_TRAIT = Trait(
+    name="Frenzied",
+    description="Attacks in rapid succession, forsaking defense",
+    trait_type="offensive",
+    strength_modifier=1.1,
+    speed_modifier=2.5,
+    defense_modifier=0.8,
+    rarity="rare",
+    dominance="dominant",
+    interaction_effects={
+        'multi_strike': 3,  # Up to 3 attacks per turn
+        'attack_speed_multiplier': 2.5,
+        'cannot_use_defensive_abilities': True
+    }
+)
+
+VAMPIRIC_TRAIT = Trait(
+    name="Vampiric",
+    description="Drains life from enemies, converting damage to health",
+    trait_type="offensive",
+    strength_modifier=1.1,
+    speed_modifier=0.95,
+    defense_modifier=0.95,
+    rarity="rare",
+    dominance="recessive",
+    interaction_effects={
+        'lifesteal': 0.5,  # Heals for 50% of damage dealt
+        'overheal_shield': True,
+        'overheal_max': 0.3  # Can overheal up to 30% max HP as shield
+    }
+)
+
+# ============================================================================
 # ECOLOGICAL TRAITS - Affect interactions with environment and other entities
 # ============================================================================
 
@@ -541,6 +710,10 @@ ALL_CREATURE_TRAITS = [
     # Physical
     ARMORED_TRAIT, SWIFT_TRAIT, REGENERATIVE_TRAIT, VENOMOUS_TRAIT,
     CAMOUFLAGED_TRAIT, KEEN_SENSES_TRAIT, POWERFUL_TRAIT,
+    # Lethal Combat
+    BERSERKER_TRAIT, EXECUTIONER_TRAIT, BLOODTHIRSTY_TRAIT, BRUTAL_TRAIT,
+    ASSASSIN_TRAIT, APEX_PREDATOR_TRAIT, RECKLESS_FURY_TRAIT, TOXIC_TRAIT,
+    FRENZIED_TRAIT, VAMPIRIC_TRAIT,
     # Ecological
     SCAVENGER_TRAIT, POLLINATOR_TRAIT, PARASITE_TRAIT, SYMBIOTIC_TRAIT,
     PREDATOR_TRAIT, HERBIVORE_TRAIT, OMNIVORE_TRAIT, TOXIN_RESISTANT_TRAIT
@@ -556,6 +729,7 @@ ALL_PELLET_TRAITS = [
 # Traits by category
 BEHAVIORAL_TRAITS = [TIMID_TRAIT, AGGRESSIVE_TRAIT, CURIOUS_TRAIT, CAUTIOUS_TRAIT, BOLD_TRAIT, SOCIAL_TRAIT, SOLITARY_TRAIT]
 PHYSICAL_TRAITS = [ARMORED_TRAIT, SWIFT_TRAIT, REGENERATIVE_TRAIT, VENOMOUS_TRAIT, CAMOUFLAGED_TRAIT, KEEN_SENSES_TRAIT, POWERFUL_TRAIT]
+LETHAL_COMBAT_TRAITS = [BERSERKER_TRAIT, EXECUTIONER_TRAIT, BLOODTHIRSTY_TRAIT, BRUTAL_TRAIT, ASSASSIN_TRAIT, APEX_PREDATOR_TRAIT, RECKLESS_FURY_TRAIT, TOXIC_TRAIT, FRENZIED_TRAIT, VAMPIRIC_TRAIT]
 ECOLOGICAL_TRAITS = [SCAVENGER_TRAIT, POLLINATOR_TRAIT, PARASITE_TRAIT, SYMBIOTIC_TRAIT, PREDATOR_TRAIT, HERBIVORE_TRAIT, OMNIVORE_TRAIT, TOXIN_RESISTANT_TRAIT]
 
 # Traits by dominance
