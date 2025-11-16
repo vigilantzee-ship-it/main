@@ -8,7 +8,7 @@ Verifies that:
 - High density scenarios are handled properly
 """
 
-import pytest
+import unittest
 from src.models.creature import Creature, CreatureType
 from src.models.stats import Stats
 from src.models.ability import create_ability
@@ -17,14 +17,14 @@ from src.systems.battle_spatial import SpatialBattle, BattleCreature
 from src.rendering.creature_renderer import CreatureRenderer
 
 
-class TestCreatureSize:
+class TestCreatureSize(unittest.TestCase):
     """Test that creature sizes have been reduced."""
     
     def test_rendering_radius_reduced(self):
         """Verify that creature rendering radius is smaller than before."""
         renderer = CreatureRenderer()
         # Should be 10 (reduced from 15)
-        assert renderer.radius == 10, f"Expected radius 10, got {renderer.radius}"
+        self.assertEqual(renderer.radius, 10, f"Expected radius 10, got {renderer.radius}")
     
     def test_collision_radius_reduced(self):
         """Verify that creature collision radius is smaller."""
@@ -33,8 +33,8 @@ class TestCreatureSize:
         battle_creature = BattleCreature(creature, position)
         
         # Should be 0.6 (reduced from 1.0)
-        assert battle_creature.spatial.radius == 0.6, \
-            f"Expected radius 0.6, got {battle_creature.spatial.radius}"
+        self.assertEqual(battle_creature.spatial.radius, 0.6,
+            f"Expected radius 0.6, got {battle_creature.spatial.radius}")
     
     def _create_test_creature(self):
         """Helper to create a test creature."""
@@ -53,7 +53,7 @@ class TestCreatureSize:
         return creature
 
 
-class TestCollisionAvoidance:
+class TestCollisionAvoidance(unittest.TestCase):
     """Test collision avoidance between creatures."""
     
     def test_separation_force_applied(self):
@@ -62,21 +62,21 @@ class TestCollisionAvoidance:
         entity2 = SpatialEntity(position=Vector2D(50.5, 50), radius=0.6)
         
         # Entities are overlapping (distance 0.5 < combined radius 1.2)
-        assert entity1.is_colliding(entity2)
+        self.assertTrue(entity1.is_colliding(entity2))
         
         # Apply separation force
         initial_velocity = entity1.velocity.magnitude()
         entity1.apply_separation_force(entity2, strength=1.5)
         
         # Velocity should have changed (separation force applied)
-        assert entity1.velocity.magnitude() > initial_velocity
+        self.assertGreater(entity1.velocity.magnitude(), initial_velocity)
         
         # Velocity should point away from entity2
         direction = (entity1.position - entity2.position).normalized()
         velocity_dir = entity1.velocity.normalized()
         # Dot product should be positive (same general direction)
         dot_product = direction.x * velocity_dir.x + direction.y * velocity_dir.y
-        assert dot_product > 0, "Separation force should push entities apart"
+        self.assertGreater(dot_product, 0, "Separation force should push entities apart")
     
     def test_no_separation_when_not_overlapping(self):
         """Test that no separation is applied when creatures are far apart."""
@@ -84,14 +84,14 @@ class TestCollisionAvoidance:
         entity2 = SpatialEntity(position=Vector2D(55, 50), radius=0.6)
         
         # Entities are not overlapping
-        assert not entity1.is_colliding(entity2)
+        self.assertFalse(entity1.is_colliding(entity2))
         
         # Apply separation force
         initial_velocity = entity1.velocity.magnitude()
         entity1.apply_separation_force(entity2, strength=1.5)
         
         # Velocity should not have changed (no separation needed)
-        assert entity1.velocity.magnitude() == initial_velocity
+        self.assertEqual(entity1.velocity.magnitude(), initial_velocity)
     
     def test_boundary_repulsion(self):
         """Test that boundary repulsion keeps creatures away from walls."""
@@ -102,7 +102,7 @@ class TestCollisionAvoidance:
         arena.apply_boundary_repulsion(entity, margin=3.0, strength=1.2)
         
         # Should have positive x velocity (pushed away from left wall)
-        assert entity.velocity.x > 0, "Should be pushed away from left boundary"
+        self.assertGreater(entity.velocity.x, 0, "Should be pushed away from left boundary")
     
     def test_creatures_dont_overlap_in_battle(self):
         """Test that creatures in battle don't overlap after updates."""
@@ -140,8 +140,8 @@ class TestCollisionAvoidance:
         # Allow for very minimal overlap due to physics simulation
         # but it should be rare (< 20% of pairs)
         max_allowed_overlaps = len(alive_creatures) * (len(alive_creatures) - 1) // 10
-        assert overlaps <= max_allowed_overlaps, \
-            f"Too many overlaps: {overlaps} (allowed: {max_allowed_overlaps})"
+        self.assertLessEqual(overlaps, max_allowed_overlaps,
+            f"Too many overlaps: {overlaps} (allowed: {max_allowed_overlaps})")
     
     def test_high_density_scenario(self):
         """Test collision avoidance in high density scenario."""
@@ -165,7 +165,7 @@ class TestCollisionAvoidance:
         
         # Most creatures should still be alive (not stuck or killed by overlap)
         alive_count = len([c for c in battle.creatures if c.is_alive()])
-        assert alive_count >= 15, f"Too many deaths in high density: {alive_count}/20 alive"
+        self.assertGreaterEqual(alive_count, 15, f"Too many deaths in high density: {alive_count}/20 alive")
         
         # Check average distance between creatures is reasonable
         alive_creatures = [c for c in battle.creatures if c.is_alive()]
@@ -181,8 +181,8 @@ class TestCollisionAvoidance:
             avg_distance = total_distance / pairs
             # Average distance should be at least the minimum separation
             min_separation = 1.2  # Combined radius
-            assert avg_distance >= min_separation * 0.8, \
-                f"Creatures too close on average: {avg_distance:.2f}"
+            self.assertGreaterEqual(avg_distance, min_separation * 0.8,
+                f"Creatures too close on average: {avg_distance:.2f}")
     
     def test_movement_smoothness(self):
         """Test that collision avoidance doesn't cause jitter."""
@@ -214,7 +214,7 @@ class TestCollisionAvoidance:
         
         # Large velocity changes indicate jitter
         # Average change should be small (smooth movement)
-        assert avg_change < 2.0, f"Movement too jerky: avg velocity change {avg_change:.2f}"
+        self.assertLess(avg_change, 2.0, f"Movement too jerky: avg velocity change {avg_change:.2f}")
     
     def _create_test_creature(self, name="TestCreature"):
         """Helper to create a test creature."""
@@ -233,7 +233,7 @@ class TestCollisionAvoidance:
         return creature
 
 
-class TestBoundaryHandling:
+class TestBoundaryHandling(unittest.TestCase):
     """Test that creatures handle arena boundaries correctly."""
     
     def test_boundary_repulsion_prevents_sticking(self):
@@ -264,7 +264,7 @@ class TestBoundaryHandling:
         
         # Creature should have been pushed away from the boundary
         final_x = battle.creatures[0].spatial.position.x
-        assert final_x > 1.5, f"Creature should have been pushed away from boundary, was at {final_x}"
+        self.assertGreater(final_x, 1.5, f"Creature should have been pushed away from boundary, was at {final_x}")
     
     def _create_test_creature(self):
         """Helper to create a test creature."""
@@ -281,3 +281,7 @@ class TestBoundaryHandling:
         )
         creature.add_ability(create_ability('tackle'))
         return creature
+
+
+if __name__ == '__main__':
+    unittest.main()

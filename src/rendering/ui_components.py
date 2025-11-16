@@ -498,7 +498,11 @@ class UIComponents:
         # Battle Feed starts at screen_height - 195
         battle_feed_top = screen.get_height() - 195
         available_height = battle_feed_top - panel_y - 10  # 10px gap
-        panel_height = min(180, available_height)  # Cap at 180 or available space
+        panel_height = min(180, max(50, available_height))  # Ensure minimum 50px height
+        
+        # Skip rendering if panel would be too small to be useful
+        if panel_height < 50:
+            return
         
         # Panel background with increased opacity for better text visibility
         panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)

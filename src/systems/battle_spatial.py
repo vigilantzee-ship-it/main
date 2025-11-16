@@ -15,6 +15,7 @@ Enhanced with:
 
 from typing import List, Optional, Dict, Callable, Tuple
 from enum import Enum
+from functools import lru_cache
 import random
 import time
 import math
@@ -260,6 +261,11 @@ class SpatialBattle:
         self.death_count: int = 0
         self.breeding_cooldown: float = 20.0  # Increased from 5.0 to 20.0 seconds for population control
         self.last_breeding_check: float = 0.0
+        
+        # Performance optimization: Cache ally relationships
+        # Key: (creature_id1, creature_id2), Value: is_ally bool
+        self._ally_cache: Dict[Tuple[str, str], bool] = {}
+        self._ally_cache_update_counter = 0
         
         if random_seed is not None:
             random.seed(random_seed)
@@ -773,7 +779,7 @@ class SpatialBattle:
     
     def _is_ally(self, creature: BattleCreature, other: BattleCreature) -> bool:
         """
-        Determine if two creatures are allies.
+        Determine if two creatures are allies (cached for performance).
         
         Allies include:
         - Family members (parent, child, sibling)
@@ -787,23 +793,32 @@ class SpatialBattle:
         Returns:
             True if they are allies
         """
+        # Use cache for performance (relationships don't change during battle)
+        cache_key = (creature.creature.creature_id, other.creature.creature_id)
+        
+        if cache_key in self._ally_cache:
+            return self._ally_cache[cache_key]
+        
         # Check family relationships
         if creature.creature.relationships.has_relationship(
             other.creature.creature_id,
             RelationshipType.PARENT
         ):
+            self._ally_cache[cache_key] = True
             return True
         
         if creature.creature.relationships.has_relationship(
             other.creature.creature_id,
             RelationshipType.CHILD
         ):
+            self._ally_cache[cache_key] = True
             return True
         
         if creature.creature.relationships.has_relationship(
             other.creature.creature_id,
             RelationshipType.SIBLING
         ):
+            self._ally_cache[cache_key] = True
             return True
         
         # Check explicit ally relationship
@@ -811,13 +826,16 @@ class SpatialBattle:
             other.creature.creature_id,
             RelationshipType.ALLY
         ):
+            self._ally_cache[cache_key] = True
             return True
         
         # Check strain cooperation (if enabled)
         if self.combat_config.same_strain_avoid_combat:
             if creature.creature.strain_id == other.creature.strain_id:
+                self._ally_cache[cache_key] = True
                 return True
         
+        self._ally_cache[cache_key] = False
         return False
     
     def _get_allies(
@@ -1343,6 +1361,14 @@ class SpatialBattle:
         pellets_to_remove = []
         pellets_to_add = []
         
+        # Optimization: Only do density checks every N updates to reduce spatial queries
+        # At 60 FPS, checking every 30 frames = ~twice per second
+        if not hasattr(self, '_pellet_update_counter'):
+            self._pellet_update_counter = 0
+        
+        self._pellet_update_counter += 1
+        should_check_reproduction = (self._pellet_update_counter % 30 == 0)
+        
         # Get only Pellet objects (not legacy Vector2D resources)
         for pellet in self.arena.pellets:
             # Age the pellet
@@ -1353,28 +1379,29 @@ class SpatialBattle:
                 pellets_to_remove.append(pellet)
                 continue
             
-            # Check if pellet can reproduce
-            # Count nearby pellets for density calculation using spatial grid
-            pellet_pos = Vector2D(pellet.x, pellet.y)
-            DENSITY_RADIUS = 20.0
-            # Use exact distance for density checks
-            nearby_pellets = self.arena.spatial_grid.query_radius(
-                pellet_pos,
-                DENSITY_RADIUS,
-                exclude={pellet},
-                exact_distance=True,
-                get_position=lambda p: Vector2D(p.x, p.y) if hasattr(p, 'x') else p
-            )
-            nearby_count = len(nearby_pellets) + 1  # +1 to include the pellet itself
-            
-            # Attempt reproduction
-            CARRYING_CAPACITY = 50  # Max pellets in local area
-            if pellet.can_reproduce(nearby_count, CARRYING_CAPACITY):
-                offspring = pellet.reproduce(mutation_rate=0.15)
-                # Clamp offspring position to arena bounds
-                offspring.x = max(0, min(self.arena.width, offspring.x))
-                offspring.y = max(0, min(self.arena.height, offspring.y))
-                pellets_to_add.append(offspring)
+            # Only check reproduction periodically to reduce expensive spatial queries
+            if should_check_reproduction:
+                # Count nearby pellets for density calculation using spatial grid
+                pellet_pos = Vector2D(pellet.x, pellet.y)
+                DENSITY_RADIUS = 20.0
+                # Use exact distance for density checks
+                nearby_pellets = self.arena.spatial_grid.query_radius(
+                    pellet_pos,
+                    DENSITY_RADIUS,
+                    exclude={pellet},
+                    exact_distance=True,
+                    get_position=lambda p: Vector2D(p.x, p.y) if hasattr(p, 'x') else p
+                )
+                nearby_count = len(nearby_pellets) + 1  # +1 to include the pellet itself
+                
+                # Attempt reproduction
+                CARRYING_CAPACITY = 50  # Max pellets in local area
+                if pellet.can_reproduce(nearby_count, CARRYING_CAPACITY):
+                    offspring = pellet.reproduce(mutation_rate=0.15)
+                    # Clamp offspring position to arena bounds
+                    offspring.x = max(0, min(self.arena.width, offspring.x))
+                    offspring.y = max(0, min(self.arena.height, offspring.y))
+                    pellets_to_add.append(offspring)
         
         # Remove dead pellets
         for pellet in pellets_to_remove:

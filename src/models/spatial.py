@@ -30,6 +30,16 @@ class Vector2D:
     def __mul__(self, scalar: float) -> 'Vector2D':
         return Vector2D(self.x * scalar, self.y * scalar)
     
+    def __hash__(self) -> int:
+        """Make Vector2D hashable for use in sets and dicts."""
+        return hash((self.x, self.y))
+    
+    def __eq__(self, other) -> bool:
+        """Compare Vector2D objects for equality."""
+        if not isinstance(other, Vector2D):
+            return False
+        return self.x == other.x and self.y == other.y
+    
     def magnitude(self) -> float:
         """Calculate the length of the vector."""
         return math.sqrt(self.x ** 2 + self.y ** 2)

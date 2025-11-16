@@ -68,15 +68,17 @@ class TestPelletBattleIntegration(unittest.TestCase):
         
         initial_count = len(battle.arena.pellets)
         
-        # Run battle for a while to allow reproduction
-        for _ in range(50):
-            battle.update(1.0)
+        # Run battle for enough updates to trigger reproduction checks
+        # Reproduction checks happen every 30 updates, so we need at least 30 updates
+        # Run more to increase probability of reproduction
+        for _ in range(100):
+            battle.update(0.016)  # 60 FPS timestep
             if len(battle.arena.pellets) > initial_count:
                 # Reproduction occurred!
                 break
         
         # With enough time and growth rate, should have more pellets
-        # (This is probabilistic, but with 50 updates it's very likely)
+        # (This is probabilistic, but with 100 updates at 60 FPS it's very likely)
         self.assertGreaterEqual(len(battle.arena.pellets), initial_count)
     
     def test_creature_death_spawns_pellets(self):
