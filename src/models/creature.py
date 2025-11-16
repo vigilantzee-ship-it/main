@@ -413,6 +413,23 @@ class Creature:
             self.hunger > 70
         )
     
+    @property
+    def generation(self) -> int:
+        """
+        Get the generation of this creature based on parent count.
+        
+        Generation 0: No parents (original/spawned creature)
+        Generation 1: Has parents (bred from generation 0)
+        Generation N: Bred from generation N-1
+        
+        Returns:
+            Generation number (0 for originals, increments with each breeding)
+        """
+        # Simple calculation: if no parents, generation 0
+        # Otherwise, we don't have parent generation info, so assume generation 1+
+        # This is a minimal implementation; full tracking would require storing parent generations
+        return 1 if self.parent_ids else 0
+    
     def tick_age(self, delta_time: float):
         """
         Update creature age and check for maturity.
