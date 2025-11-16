@@ -477,6 +477,7 @@ class UIComponents:
         Render a panel showing pellet population statistics.
         
         Panel is positioned in the right margin below the CREATURES panel.
+        Sized to fit above the Battle Feed panel.
         
         Args:
             screen: Pygame surface to draw on
@@ -487,18 +488,24 @@ class UIComponents:
             return
         
         panel_width = 230
-        panel_height = 180
         margin_from_edge = 10
         
         # Position in right margin area, below the creatures panel
         panel_x = screen.get_width() - panel_width - margin_from_edge
         panel_y = 660  # Below creatures panel (90 + 550 + 20 spacing)
         
-        # Panel background
+        # Calculate available height before Battle Feed starts
+        # Battle Feed starts at screen_height - 195
+        battle_feed_top = screen.get_height() - 195
+        available_height = battle_feed_top - panel_y - 10  # 10px gap
+        panel_height = min(180, available_height)  # Cap at 180 or available space
+        
+        # Panel background with increased opacity for better text visibility
         panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        # Use higher opacity background (230 instead of 180) for better text contrast
         pygame.draw.rect(
             panel_surface,
-            self.panel_bg,
+            (20, 20, 30, 230),
             pygame.Rect(0, 0, panel_width, panel_height),
             border_radius=8
         )

@@ -58,6 +58,9 @@ class CreatureInspector:
         self.line_height = 20
         self.section_spacing = 15
         
+        # Expanded hover area (pixels around panel to keep it visible)
+        self.hover_padding = 30  # 30px padding around panel
+        
         # Load preferences
         prefs = get_preferences()
         
@@ -130,9 +133,48 @@ class CreatureInspector:
         
         # Auto-hide logic (if not pinned and visible)
         if self.visible and not self.is_pinned and self.auto_hide_timeout > 0:
-            self.auto_hide_timer += dt
-            if self.auto_hide_timer >= self.auto_hide_timeout:
-                self.hide()
+            # Check if mouse is hovering over the panel (with expanded hover area)
+            if self._is_mouse_over_panel():
+                self.auto_hide_timer = 0.0
+            else:
+                self.auto_hide_timer += dt
+                if self.auto_hide_timer >= self.auto_hide_timeout:
+                    self.hide()
+    
+    def _is_mouse_over_panel(self) -> bool:
+        """
+        Check if mouse is over the inspector panel or within the expanded hover area.
+        
+        Returns:
+            True if mouse is over panel (with padding), False otherwise
+        """
+        if not self.visible or self.position is None:
+            return False
+        
+        # Get current screen to calculate dimensions
+        try:
+            screen = pygame.display.get_surface()
+            if screen is None:
+                return False
+            
+            screen_width, screen_height = screen.get_size()
+            panel_width = int(screen_width * self.panel_width_pct)
+            panel_height = int(screen_height * self.panel_height_pct)
+            
+            panel_x, panel_y = self.position
+            
+            # Create expanded rect with hover padding
+            hover_rect = pygame.Rect(
+                panel_x - self.hover_padding,
+                panel_y - self.hover_padding,
+                panel_width + (self.hover_padding * 2),
+                panel_height + (self.hover_padding * 2)
+            )
+            
+            mouse_pos = pygame.mouse.get_pos()
+            return hover_rect.collidepoint(mouse_pos)
+        except:
+            return False
     
     def handle_scroll(self, direction: int):
         """
@@ -217,9 +259,14 @@ class CreatureInspector:
                 self.position = (new_x, new_y)
                 return True
             
-            # Check if mouse is over panel (reset auto-hide)
-            panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-            if panel_rect.collidepoint(pygame.mouse.get_pos()):
+            # Check if mouse is over panel with expanded hover area (reset auto-hide)
+            hover_rect = pygame.Rect(
+                panel_x - self.hover_padding,
+                panel_y - self.hover_padding,
+                panel_width + (self.hover_padding * 2),
+                panel_height + (self.hover_padding * 2)
+            )
+            if hover_rect.collidepoint(pygame.mouse.get_pos()):
                 self.auto_hide_timer = 0.0
         
         return False
