@@ -493,10 +493,26 @@ class CreatureInspector:
         if allies or enemies or family:
             y = self._render_section_header(content, "Relationships", x_margin, y)
             
+            # Display social traits first
+            social_desc = f"Traits: {creature.social_traits.get_description()}"
+            trait_text = self.small_font.render(social_desc, True, self.stat_color)
+            content.blit(trait_text, (x_margin + 10, y))
+            y += self.line_height + 3
+            
             if family:
                 text = self.text_font.render(f"Family: {len(family)}", True, self.success_color)
                 content.blit(text, (x_margin + 10, y))
                 y += self.line_height
+                # Show first family member with metrics
+                if len(family) > 0:
+                    rel = family[0]
+                    coop = rel.metrics.get_cooperation_score() if rel.metrics else 0
+                    detail = self.small_font.render(
+                        f"  • {rel.relationship_type.value} (Coop: {coop:.2f})",
+                        True, (200, 200, 200)
+                    )
+                    content.blit(detail, (x_margin + 15, y))
+                    y += self.line_height - 2
             
             if allies:
                 text = self.text_font.render(f"Allies: {len(allies)}", True, (100, 200, 255))

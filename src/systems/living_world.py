@@ -11,6 +11,11 @@ from ..models.creature import Creature
 from ..models.history import EventType
 from ..models.skills import SkillType
 from ..models.relationships import RelationshipType
+from ..models.relationship_metrics import (
+    CooperativeBehaviorSystem,
+    DecisionContext,
+    AgentSocialState
+)
 
 
 class LivingWorldBattleEnhancer:
@@ -18,7 +23,7 @@ class LivingWorldBattleEnhancer:
     Enhances battle system with living world features.
     
     Provides hooks for integrating history, skills, personality, and relationships
-    into combat calculations and decision making.
+    into combat calculations and decision making. Now includes cooperative behaviors.
     """
     
     def __init__(self, battle_system):
@@ -30,6 +35,30 @@ class LivingWorldBattleEnhancer:
         """
         self.battle = battle_system
         self.combat_started = {}  # Track who started combat with whom
+        self.cooperative_system = CooperativeBehaviorSystem()
+    
+    def update_social_states(self, creatures: List[Creature]):
+        """
+        Update social state for all creatures based on current battle context.
+        
+        Args:
+            creatures: All creatures in the battle
+        """
+        for creature in creatures:
+            # Update hunger level (normalized 0-1)
+            creature.social_state.hunger_level = creature.hunger / creature.max_hunger
+            
+            # Update health level (normalized 0-1)
+            creature.social_state.health_level = creature.stats.hp / creature.stats.max_hp if creature.stats.max_hp > 0 else 0
+            
+            # Update combat status
+            creature.social_state.in_combat = True
+            
+            # Determine pack members (same strain fighting together)
+            creature.social_state.current_pack = [
+                c.creature_id for c in creatures
+                if c.strain_id == creature.strain_id and c.creature_id != creature.creature_id and c.stats.hp > 0
+            ]
     
     def on_battle_start(self, creatures: List[Creature]):
         """
@@ -42,6 +71,111 @@ class LivingWorldBattleEnhancer:
             # Record battle start in history
             other_ids = [c.creature_id for c in creatures if c.creature_id != creature.creature_id]
             creature.history.record_battle_start(other_ids)
+        
+        # Update social states for all creatures
+        self.update_social_states(creatures)
+    
+    def evaluate_food_sharing(
+        self,
+        giver: Creature,
+        receiver: Creature,
+        food_amount: float
+    ) -> Tuple[bool, float]:
+        """
+        Evaluate whether a creature should share food.
+        
+        Args:
+            giver: Creature that has food
+            receiver: Creature that might receive food
+            food_amount: Amount of food giver has
+            
+        Returns:
+            (should_share, amount_to_share)
+        """
+        # Get or create relationship
+        rel = giver.relationships.get_relationship(receiver.creature_id)
+        if not rel:
+            return False, 0.0
+        
+        # Create decision context
+        context = DecisionContext(
+            actor_id=giver.creature_id,
+            target_id=receiver.creature_id,
+            actor_traits=giver.social_traits,
+            target_traits=receiver.social_traits,
+            metrics=rel.metrics,
+            actor_state=giver.social_state,
+            target_state=receiver.social_state
+        )
+        
+        # Evaluate sharing decision
+        should_share, amount = self.cooperative_system.evaluate_food_sharing(context, food_amount)
+        
+        if should_share:
+            # Record the cooperative behavior
+            rel.record_cooperative_behavior("food_shared")
+            giver.history.add_custom_event(
+                "food_shared",
+                f"Shared food with {receiver.name}"
+            )
+            self.cooperative_system.record_behavior(giver.creature_id, "food_shared")
+        
+        return should_share, amount
+    
+    def evaluate_join_fight(
+        self,
+        potential_ally: Creature,
+        creature_in_fight: Creature,
+        threat_level: float
+    ) -> Tuple[bool, float]:
+        """
+        Evaluate whether a creature should join an ally's fight.
+        
+        Args:
+            potential_ally: Creature considering joining
+            creature_in_fight: Ally who is fighting
+            threat_level: How dangerous the fight is (0-1)
+            
+        Returns:
+            (should_join, commitment_level)
+        """
+        # Get or create relationship
+        rel = potential_ally.relationships.get_relationship(creature_in_fight.creature_id)
+        if not rel:
+            # No relationship, unlikely to help unless pack member
+            if creature_in_fight.creature_id not in potential_ally.social_state.current_pack:
+                return False, 0.0
+            # Create pack relationship
+            from ..models.relationship_metrics import create_pack_bond
+            metrics = create_pack_bond(potential_ally.creature_id, creature_in_fight.creature_id)
+            rel = potential_ally.relationships.add_relationship(
+                creature_in_fight.creature_id,
+                RelationshipType.ALLY,
+                strength=0.6
+            )
+            rel.metrics = metrics
+        
+        # Create decision context
+        context = DecisionContext(
+            actor_id=potential_ally.creature_id,
+            target_id=creature_in_fight.creature_id,
+            actor_traits=potential_ally.social_traits,
+            target_traits=creature_in_fight.social_traits,
+            metrics=rel.metrics,
+            actor_state=potential_ally.social_state,
+            target_state=creature_in_fight.social_state
+        )
+        
+        # Evaluate join decision
+        should_join, commitment = self.cooperative_system.evaluate_join_fight(context, threat_level)
+        
+        if should_join:
+            # Record the cooperative behavior
+            rel.record_cooperative_behavior("fought_together")
+            potential_ally.relationships.record_fought_together(creature_in_fight.creature_id)
+            self.cooperative_system.record_behavior(potential_ally.creature_id, "joined_fight")
+        
+        return should_join, commitment
     
     def enhance_target_selection(
         self,
@@ -107,7 +241,8 @@ class LivingWorldBattleEnhancer:
         attacker: Creature,
         defender: Creature,
         base_damage: float,
-        is_critical: bool = False
+        is_critical: bool = False,
+        allies_present: Optional[List[Creature]] = None
     ) -> float:
         """
         Calculate final damage with all living world modifiers.
@@ -117,6 +252,7 @@ class LivingWorldBattleEnhancer:
             defender: Defending creature
             base_damage: Base damage before modifiers
             is_critical: Whether this is a critical hit
+            allies_present: List of allies fighting alongside attacker
             
         Returns:
             Modified damage value
@@ -128,10 +264,33 @@ class LivingWorldBattleEnhancer:
         skill_modifier = attack_skill.get_performance_modifier()
         damage *= skill_modifier
         
+        # Count allies and family members
+        allies_count = 0
+        family_count = 0
+        if allies_present:
+            for ally in allies_present:
+                if ally.creature_id != attacker.creature_id and ally.stats.hp > 0:
+                    allies_count += 1
+                    # Check if family member
+                    rel = attacker.relationships.get_relationship(ally.creature_id)
+                    if rel and rel.relationship_type in [
+                        RelationshipType.PARENT,
+                        RelationshipType.CHILD,
+                        RelationshipType.SIBLING
+                    ]:
+                        family_count += 1
+        
+        # Group combat bonus from cooperative behavior system
+        group_bonus = self.cooperative_system.calculate_group_combat_bonus(
+            attacker.social_traits,
+            allies_count,
+            family_count
+        )
+        damage *= group_bonus
+        
         # Personality modifiers
-        # Check if fighting with allies (same strain)
-        has_allies = False  # Would need to check battle state
-        has_family = False  # Would need to check if any family members are allies
+        has_allies = allies_count > 0
+        has_family = family_count > 0
         team_bonus = attacker.personality.get_team_fight_bonus(has_allies, has_family)
         damage *= team_bonus
         
