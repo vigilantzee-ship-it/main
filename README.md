@@ -5,7 +5,18 @@ This is an evolution-based battle game where players can engage in battles, bree
 
 ## Features
 
-### Living World System ✓ NEW!
+### AI-Powered Battle Stories ✓ NEW!
+Transform battles into shareable narratives with AI-generated story summaries:
+- **Automatic Story Generation**: AI creates engaging battle reports every 5 minutes (configurable)
+- **Multiple Tones**: Choose from dramatic, heroic, comedic, serious, or documentary styles
+- **Story Viewer UI**: Dedicated panel with scrollable text, tone selection, and export options
+- **Export & Share**: Save stories as TXT or Markdown files
+- **Key Moments**: Highlights MVPs, turning points, alliances, betrayals, and dramatic events
+- **Works Offline**: Fallback mode generates structured summaries without AI API
+
+See [Battle Story Mode Documentation](BATTLE_STORY_MODE_DOCUMENTATION.md) for details.
+
+### Living World System ✓
 Transform battles into emergent narratives where every creature matters:
 - **Individual Histories**: Track every attack, kill, achievement, and life event
 - **Skill Progression**: Skills improve through use (Melee Attack, Dodge, Critical Strike, etc.)
@@ -98,7 +109,8 @@ This project is developed by three specialist agents working in coordination:
 - **Data & Systems Agent** - Manages game state, persistence, and support systems ([Issue #13](https://github.com/dbmelville2-jpg/evobattle/issues/13))
 
 **Important Documentation:**
-- [**Living World Documentation**](LIVING_WORLD_DOCUMENTATION.md) - **NEW!** Creature histories, skills, personalities, relationships
+- [**Battle Story Mode Documentation**](BATTLE_STORY_MODE_DOCUMENTATION.md) - **NEW!** AI-powered battle narratives
+- [**Living World Documentation**](LIVING_WORLD_DOCUMENTATION.md) - Creature histories, skills, personalities, relationships
 - [Battle System Documentation](BATTLE_SYSTEM_DOCUMENTATION.md) - Complete battle system guide
 - [Core Models Documentation](MODELS_DOCUMENTATION.md) - Creature, stats, and ability systems
 - [Ecosystem Documentation](ECOSYSTEM_DOCUMENTATION.md) - Hunger, foraging, and survival mechanics
@@ -113,7 +125,10 @@ This project is developed by three specialist agents working in coordination:
 All examples should be run from the project root directory using Python's module syntax:
 
 ```bash
-# Living World demos (NEW!)
+# Battle Story Mode demo (NEW!)
+python3 -m examples.battle_story_mode_demo  # AI-powered battle narratives
+
+# Living World demos
 python3 -m examples.living_world_demo              # Text-based: See histories and skills
 python3 -m examples.interactive_living_world_demo  # Visual: Click creatures to inspect
 

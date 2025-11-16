@@ -12,8 +12,11 @@ from .pellet_renderer import PelletRenderer
 from .ui_components import UIComponents
 from .event_animator import EventAnimator
 from .creature_inspector import CreatureInspector
+from .pellet_inspector import PelletInspector
 from .pause_menu import PauseMenu, PauseMenuAction
 from .post_game_summary import PostGameSummary
+from .trait_dashboard import TraitAnalyticsDashboard
+from .story_viewer import StoryViewer, StoryViewerAction
 
 __all__ = [
     'GameWindow',
@@ -23,7 +26,11 @@ __all__ = [
     'UIComponents',
     'EventAnimator',
     'CreatureInspector',
+    'PelletInspector',
     'PauseMenu',
     'PauseMenuAction',
     'PostGameSummary',
+    'TraitAnalyticsDashboard',
+    'StoryViewer',
+    'StoryViewerAction',
 ]
