@@ -100,7 +100,7 @@ class SpatialEntity:
         # Update position
         self.position = self.position + (self.velocity * delta_time)
     
-    def move_towards(self, target: Vector2D, speed: Optional[float] = None, delta_time: float = 0.016):
+    def move_towards(self, target: Vector2D, speed: Optional[float] = None, delta_time: float = 0.016, stopping_distance: float = 0.0):
         """
         Set velocity to move towards a target position with smooth acceleration.
         
@@ -108,9 +108,29 @@ class SpatialEntity:
             target: Target position to move towards
             speed: Movement speed (uses max_speed if None)
             delta_time: Time step for acceleration calculation (default 60fps = 0.016s)
+            stopping_distance: Minimum distance to maintain from target (prevents jittering when close)
         """
+        # Calculate distance to target
+        distance_to_target = self.position.distance_to(target)
+        
+        # If already within stopping distance, slow down instead of continuing to move
+        if distance_to_target <= stopping_distance:
+            # Apply strong damping to come to a stop quickly
+            self.velocity = self.velocity * 0.3
+            return
+        
         speed = speed or self.max_speed
         direction = (target - self.position).normalized()
+        
+        # Reduce speed as we approach the stopping distance to enable smooth arrival
+        # Use a deceleration zone proportional to max speed for smooth braking
+        deceleration_zone = max(3.0, speed * 2.0)  # At least 3 units, or 2x speed
+        if distance_to_target < stopping_distance + deceleration_zone:
+            # Scale speed based on distance - gradually slow down
+            speed_scale = (distance_to_target - stopping_distance) / deceleration_zone
+            speed_scale = max(0.05, min(1.0, speed_scale))  # Clamp between 0.05 and 1.0
+            speed *= speed_scale
+        
         desired_velocity = direction * speed
         
         # Smoothly accelerate towards desired velocity

@@ -750,7 +750,16 @@ class SpatialBattle:
             original_max_speed = creature.spatial.max_speed
             creature.spatial.max_speed *= movement_speed_modifier
             
-            creature.spatial.move_towards(movement_target, delta_time=delta_time)
+            # Determine stopping distance based on target type
+            # When moving towards another creature (combat or fleeing), maintain distance to prevent overlap
+            # When moving towards resources or wandering, allow getting very close
+            stopping_distance = 0.0
+            if creature.target and creature.target.is_alive():
+                # Moving towards enemy - stop at sum of radii to prevent constant overlap/separation
+                # Add small buffer for attack range
+                stopping_distance = creature.spatial.radius + creature.target.spatial.radius + 0.5
+            
+            creature.spatial.move_towards(movement_target, delta_time=delta_time, stopping_distance=stopping_distance)
             
             # Check if creature is engaged in combat with target
             # Combat engagement reduces separation to allow melee attacks
