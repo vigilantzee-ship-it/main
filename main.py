@@ -347,24 +347,6 @@ def run_battle_loop(window, battle):
         # Render main UI (includes battle timer, population, pellet stats, event log)
         ui_components.render(window.screen, battle, paused)
         
-        # Render additional ecosystem stats
-        alive_creatures = [c for c in battle.creatures if c.is_alive()]
-        font = pygame.font.Font(None, 24)
-        
-        # Food/resource count
-        resource_text = f"Food: {len(battle.arena.resources)}"
-        text_surface = font.render(resource_text, True, (120, 255, 100))
-        window.screen.blit(text_surface, (window.width - 150, 30))
-        
-        # Birth and death counts
-        births_text = f"Births: {battle.birth_count}"
-        births_surface = font.render(births_text, True, (100, 255, 150))
-        window.screen.blit(births_surface, (window.width - 150, 60))
-        
-        deaths_text = f"Deaths: {battle.death_count}"
-        deaths_surface = font.render(deaths_text, True, (255, 100, 100))
-        window.screen.blit(deaths_surface, (window.width - 150, 90))
-        
         # Render creature inspector
         creature_inspector.render(window.screen)
         
