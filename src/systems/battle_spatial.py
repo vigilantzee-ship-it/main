@@ -32,6 +32,7 @@ from ..models.combat_targeting import CombatTargetingSystem, CombatContext, Targ
 from ..models.relationships import RelationshipType
 from ..models.injury_tracker import DamageType
 from .breeding import Breeding
+from .grass_growth_system import GrassGrowthSystem
 
 
 class BattleEventType(Enum):
@@ -273,6 +274,16 @@ class SpatialBattle:
         self._ally_cache: Dict[Tuple[str, str], bool] = {}
         self._ally_cache_update_counter = 0
         
+        # Grass growth enhancement system
+        self.grass_growth = GrassGrowthSystem(
+            arena_width=arena_width,
+            arena_height=arena_height,
+            enable_pollination=True,
+            enable_nutrient_zones=True,
+            enable_growth_pulses=True,
+            enable_symbiotic_bonus=True
+        )
+        
         if random_seed is not None:
             random.seed(random_seed)
         
@@ -435,6 +446,19 @@ class SpatialBattle:
         
         # Update pellet lifecycle (age, reproduce, die)
         self._update_pellets(delta_time)
+        
+        # Update grass growth system and emit events
+        was_pulse_active = self.grass_growth.is_growth_pulse_active()
+        self.grass_growth.update(delta_time)
+        is_pulse_active = self.grass_growth.is_growth_pulse_active()
+        
+        # Emit event when growth pulse starts
+        if not was_pulse_active and is_pulse_active:
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.PELLET_SPAWN,
+                message="Growth pulse! Sunlight and rain boost grass growth!",
+                data={'growth_pulse': True, 'multiplier': self.grass_growth.growth_pulse_multiplier}
+            ))
         
         # Update each creature
         for creature in alive_creatures:
@@ -728,6 +752,21 @@ class SpatialBattle:
             # Get resource position (works for both Vector2D and Pellet)
             resource_pos = self.arena.get_resource_position(resource)
             distance = creature.spatial.position.distance_to(resource_pos)
+            
+            # Try pollination when creature is near pellet (before eating)
+            if isinstance(resource, Pellet) and distance < 5.0:
+                pollinated_pellet = self.grass_growth.try_pollination(
+                    creature, resource, self.current_time
+                )
+                if pollinated_pellet:
+                    # Add the new pollinated pellet to arena
+                    self.arena.add_pellet(pollinated_pellet)
+                    self._emit_event(BattleEvent(
+                        event_type=BattleEventType.PELLET_SPAWN,
+                        actor=creature,
+                        message=f"{creature.creature.name} pollinated grass! Seeds spread.",
+                        data={'pollination': True, 'position': (pollinated_pellet.x, pollinated_pellet.y)}
+                    ))
             
             if distance < 2.0:  # Collection range
                 # Check if creature can eat plant resources (herbivore or omnivore)
@@ -1353,6 +1392,14 @@ class SpatialBattle:
         # Calculate nutritional value based on creature's size/stats
         base_nutrition = 30.0 + (creature.creature.stats.max_hp / 10.0)
         
+        # Create nutrient zone where creature died (enhances pellet growth)
+        creature_size = creature.creature.stats.max_hp / 100.0  # Normalize size
+        self.grass_growth.on_creature_death(
+            x=creature.spatial.position.x,
+            y=creature.spatial.position.y,
+            creature_size=creature_size
+        )
+        
         for i in range(count):
             # Spawn pellets near the creature's position
             offset_x = random.uniform(-3, 3)
@@ -1410,9 +1457,34 @@ class SpatialBattle:
                 )
                 nearby_count = len(nearby_pellets) + 1  # +1 to include the pellet itself
                 
-                # Attempt reproduction
+                # Get nearby creatures for symbiotic bonus
+                CREATURE_RADIUS = 15.0
+                nearby_creatures = self.creature_grid.query_radius(
+                    pellet_pos,
+                    CREATURE_RADIUS,
+                    exact_distance=True
+                )
+                
+                # Calculate growth rate multiplier from grass growth system
+                growth_multiplier = self.grass_growth.get_growth_rate_multiplier(
+                    pellet, 
+                    nearby_creatures
+                )
+                
+                # Attempt reproduction with enhanced growth rate
                 CARRYING_CAPACITY = 50  # Max pellets in local area
-                if pellet.can_reproduce(nearby_count, CARRYING_CAPACITY):
+                
+                # Apply growth multiplier by temporarily boosting the pellet's growth rate
+                original_growth_rate = pellet.traits.growth_rate
+                pellet.traits.growth_rate *= growth_multiplier
+                
+                # Check reproduction with boosted rate
+                can_reproduce = pellet.can_reproduce(nearby_count, CARRYING_CAPACITY)
+                
+                # Restore original growth rate
+                pellet.traits.growth_rate = original_growth_rate
+                
+                if can_reproduce:
                     offspring = pellet.reproduce(mutation_rate=0.15)
                     # Clamp offspring position to arena bounds
                     offspring.x = max(0, min(self.arena.width, offspring.x))

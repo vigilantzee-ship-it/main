@@ -60,6 +60,17 @@ A complete survival ecosystem simulation featuring:
 
 See [Ecosystem Documentation](ECOSYSTEM_DOCUMENTATION.md) for details.
 
+### Grass Growth Enhancement System ✓ NEW!
+Dynamic pellet (food) growth using simulation-based mechanics:
+- **Nutrient Zones**: Pellets grow faster where creatures died (1.05-1.15x boost, lasts 30s)
+- **Pollination**: Creatures spread seeds as they move (3% chance on revisit)
+- **Growth Pulses**: Periodic environmental boosts (10% boost every 60s for 8s)
+- **Symbiotic Bonus**: Herbivores enhance nearby grass growth (up to 8% boost)
+- **Spatial Patterns**: Pellets cluster around death sites and herbivore paths
+- **Balanced Growth**: 100% increase over 30s with zones vs 40% baseline
+
+See [Grass Growth System Documentation](GRASS_GROWTH_SYSTEM.md) for details.
+
 ### Lethal Combat Traits ✓ NEW!
 High-risk, high-reward combat traits that enable dramatic kills and apex predators:
 - **10 New Offensive Traits**: Berserker, Executioner, Bloodthirsty, Brutal, Assassin, Apex Predator, Reckless Fury, Toxic, Frenzied, Vampiric
