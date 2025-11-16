@@ -10,6 +10,7 @@ from typing import Optional, Tuple, List
 import random
 import uuid
 import time
+from .pellet_history import PelletLifeHistory
 
 
 @dataclass
@@ -106,6 +107,7 @@ class Pellet:
         born_time: Simulation time when pellet was created
         parent_id: ID of parent pellet (None if initial spawn)
         generation: How many generations from initial pellets
+        history: PelletLifeHistory tracking lifecycle events
     """
     pellet_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     x: float = 0.0
@@ -116,6 +118,12 @@ class Pellet:
     born_time: float = field(default_factory=time.time)
     parent_id: Optional[str] = None
     generation: int = 0
+    history: Optional[PelletLifeHistory] = field(default=None, repr=False)
+    
+    def __post_init__(self):
+        """Initialize history if not provided."""
+        if self.history is None:
+            self.history = PelletLifeHistory(self.pellet_id, self.born_time)
     
     def __hash__(self):
         """Make Pellet hashable based on its unique ID."""
@@ -246,7 +254,8 @@ class Pellet:
             'max_age': self.max_age,
             'born_time': self.born_time,
             'parent_id': self.parent_id,
-            'generation': self.generation
+            'generation': self.generation,
+            'history': self.history.to_dict() if self.history else None
         }
     
     @staticmethod
@@ -254,6 +263,11 @@ class Pellet:
         """Deserialize from dictionary."""
         data_copy = data.copy()
         data_copy['traits'] = PelletTraits.from_dict(data_copy['traits'])
+        
+        # Restore history if present
+        if 'history' in data_copy and data_copy['history'] is not None:
+            data_copy['history'] = PelletLifeHistory.from_dict(data_copy['history'])
+        
         return Pellet(**data_copy)
     
     def __repr__(self):
