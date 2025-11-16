@@ -50,7 +50,10 @@ from src.systems.living_world import LivingWorldBattleEnhancer
 from src.rendering import (
     GameWindow, ArenaRenderer, CreatureRenderer, PelletRenderer,
     UIComponents, EventAnimator, CreatureInspector, PauseMenu,
-    PauseMenuAction, PostGameSummary
+    PauseMenuAction, PostGameSummary, StoryViewer, StoryViewerAction
+)
+from src.systems.battle_story_summarizer import (
+    BattleStoryGenerator, BattleStoryTracker, StoryTone
 )
 from src.utils.name_generator import NameGenerator
 
@@ -217,7 +220,16 @@ def run_battle_loop(window, battle):
     creature_inspector = CreatureInspector()
     pause_menu = PauseMenu()
     post_game_summary = PostGameSummary()
+    story_viewer = StoryViewer(width=700, height=600)
     font = pygame.font.Font(None, 24)
+    
+    # Initialize story generation system
+    story_generator = BattleStoryGenerator(default_tone=StoryTone.DRAMATIC)
+    story_tracker = BattleStoryTracker(
+        generator=story_generator,
+        story_interval_seconds=300.0  # 5 minutes for production
+    )
+    story_tracker.start_tracking()
     
     # Connect pellet renderer to arena renderer
     arena_renderer.pellet_renderer = pellet_renderer
@@ -226,17 +238,30 @@ def run_battle_loop(window, battle):
     battle.add_event_callback(ui_components.add_event_to_log)
     battle.add_event_callback(event_animator.on_battle_event)
     
+    # Add story event callback
+    def on_battle_event(event):
+        story_tracker.generator.add_event(event)
+    battle.add_event_callback(on_battle_event)
+    
     # Game state
     clock = pygame.time.Clock()
     running = True
     paused = False
     selected_battle_creature = None
     show_summary = False
+    show_story = False
+    current_story = "Battle in progress... Story will be generated after 5 minutes of combat.\n\nPress 'S' to view this panel again at any time."
+    current_tone = StoryTone.DRAMATIC
+    last_story_notification = 0.0
+    
+    # Set initial story in viewer
+    story_viewer.set_story(current_story, current_tone)
     
     print("\n=== Battle Started ===")
     print("Controls:")
     print("  Click on creatures to inspect their history and stats")
     print("  I: Toggle creature inspector")
+    print("  S: View battle story")
     print("  SPACE: Pause/Resume")
     print("  ESC: Pause Menu")
     print("  R: Restart (from pause menu)")
@@ -274,6 +299,39 @@ def run_battle_loop(window, battle):
                     print(f"Stats exported to: {filepath}")
                 continue
             
+            # Story viewer handling
+            if show_story:
+                result = story_viewer.handle_event(event, 350, 150)
+                if result:
+                    action, data = result
+                    
+                    if action == StoryViewerAction.CLOSE:
+                        show_story = False
+                    
+                    elif action == StoryViewerAction.CHANGE_TONE:
+                        current_tone = data
+                        print(f"\nRegenerating story with {current_tone.value} tone...")
+                        current_story = story_tracker.generator.generate_story(tone=current_tone)
+                        story_viewer.set_story(current_story, current_tone)
+                        print("Story regenerated!")
+                    
+                    elif action == StoryViewerAction.REGENERATE:
+                        print(f"\nRegenerating story with {current_tone.value} tone...")
+                        current_story = story_tracker.generator.generate_story(tone=current_tone)
+                        story_viewer.set_story(current_story, current_tone)
+                        print("Story regenerated!")
+                    
+                    elif action == StoryViewerAction.EXPORT_TXT:
+                        filepath = "battle_story.txt"
+                        story_tracker.generator.export_story(current_story, filepath, 'txt')
+                        print(f"\nStory exported to {filepath}")
+                    
+                    elif action == StoryViewerAction.EXPORT_MD:
+                        filepath = "battle_story.md"
+                        story_tracker.generator.export_story(current_story, filepath, 'md')
+                        print(f"\nStory exported to {filepath}")
+                continue
+            
             # Inspector handling
             if creature_inspector.handle_mouse_event(event, window.screen):
                 continue
@@ -281,14 +339,21 @@ def run_battle_loop(window, battle):
             # Regular input
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if creature_inspector.visible and not creature_inspector.is_pinned:
+                    if show_story:
+                        show_story = False
+                    elif creature_inspector.visible and not creature_inspector.is_pinned:
                         creature_inspector.hide()
                     else:
                         pause_menu.show()
                         paused = True
                 elif event.key == pygame.K_SPACE:
-                    if not pause_menu.visible:
+                    if not pause_menu.visible and not show_story:
                         paused = not paused
+                elif event.key == pygame.K_s:
+                    show_story = not show_story
+                    if show_story:
+                        # Update story when opening viewer
+                        story_viewer.set_story(current_story, current_tone)
                 elif event.key == pygame.K_i:
                     creature_inspector.toggle_visibility()
             
@@ -307,8 +372,24 @@ def run_battle_loop(window, battle):
                 creature_inspector.handle_scroll(-event.y)
         
         # Update battle
-        if not paused and not battle.is_over:
+        if not paused and not show_story and not battle.is_over:
             battle.update(dt)
+            
+            # Add battle logs to story generator
+            for log in battle.get_battle_log():
+                if log not in story_tracker.generator.battle_logs:
+                    story_tracker.generator.add_log(log)
+            
+            # Check if it's time to generate a story
+            if story_tracker.should_generate_story():
+                print(f"\n{'='*70}")
+                print(f"  AUTO-GENERATING STORY ({story_tracker.story_interval}s interval)")
+                print(f"{'='*70}")
+                current_story = story_tracker.generate_and_store_story(tone=current_tone)
+                story_viewer.set_story(current_story, current_tone)
+                last_story_notification = battle.current_time
+                print("\nStory generated! Press 'S' to view it.")
+                print(f"Total stories generated: {len(story_tracker.get_all_stories())}")
         
         # Update animations
         creature_inspector.update(dt)
@@ -318,38 +399,72 @@ def run_battle_loop(window, battle):
         # Render
         window.screen.fill((20, 20, 30))
         
-        # Render arena
-        arena_renderer.render(window.screen, battle)
+        if show_story:
+            # Draw dimmed battle background
+            arena_renderer.render(window.screen, battle)
+            pellet_renderer.render(window.screen, battle)
+            creature_renderer.render(window.screen, battle)
+            
+            # Darken the background
+            dark_overlay = pygame.Surface((window.width, window.height))
+            dark_overlay.set_alpha(180)
+            dark_overlay.fill((0, 0, 0))
+            window.screen.blit(dark_overlay, (0, 0))
+            
+            # Draw story viewer
+            story_viewer.draw(window.screen, 350, 150)
         
-        # Render pellets with evolution tracking
-        pellet_renderer.render(window.screen, battle)
-        
-        # Render creatures
-        creature_renderer.render(window.screen, battle)
-        
-        # Highlight selected creature
-        if selected_battle_creature and selected_battle_creature.is_alive():
-            screen_pos = arena_renderer.world_to_screen(
-                selected_battle_creature.spatial.position,
-                window.screen,
-                battle.arena
-            )
-            pygame.draw.circle(
-                window.screen,
-                (255, 255, 0),
-                (int(screen_pos[0]), int(screen_pos[1])),
-                30,
-                3
-            )
-        
-        # Render event animations
-        event_animator.render(window.screen)
-        
-        # Render main UI (includes battle timer, population, pellet stats, event log)
-        ui_components.render(window.screen, battle, paused)
-        
-        # Render creature inspector
-        creature_inspector.render(window.screen)
+        else:
+            # Render arena
+            arena_renderer.render(window.screen, battle)
+            
+            # Render pellets with evolution tracking
+            pellet_renderer.render(window.screen, battle)
+            
+            # Render creatures
+            creature_renderer.render(window.screen, battle)
+            
+            # Highlight selected creature
+            if selected_battle_creature and selected_battle_creature.is_alive():
+                screen_pos = arena_renderer.world_to_screen(
+                    selected_battle_creature.spatial.position,
+                    window.screen,
+                    battle.arena
+                )
+                pygame.draw.circle(
+                    window.screen,
+                    (255, 255, 0),
+                    (int(screen_pos[0]), int(screen_pos[1])),
+                    30,
+                    3
+                )
+            
+            # Render event animations
+            event_animator.render(window.screen)
+            
+            # Render main UI (includes battle timer, population, pellet stats, event log)
+            ui_components.render(window.screen, battle, paused)
+            
+            # Render creature inspector
+            creature_inspector.render(window.screen)
+            
+            # Draw story notification if recently generated
+            if not paused and battle.current_time - last_story_notification < 5.0:
+                notification_font = pygame.font.Font(None, 36)
+                notification_text = notification_font.render(
+                    "New Story Available! Press 'S' to view",
+                    True,
+                    (255, 215, 0)
+                )
+                x = (window.width - notification_text.get_width()) // 2
+                y = 50
+                # Draw background
+                bg_rect = notification_text.get_rect(topleft=(x-10, y-5))
+                bg_rect.width += 20
+                bg_rect.height += 10
+                pygame.draw.rect(window.screen, (30, 30, 40), bg_rect)
+                pygame.draw.rect(window.screen, (255, 215, 0), bg_rect, 2)
+                window.screen.blit(notification_text, (x, y))
         
         # Render pause menu
         pause_menu.render(window.screen)
@@ -359,9 +474,9 @@ def run_battle_loop(window, battle):
             post_game_summary.render(window.screen)
         
         # Instructions overlay
-        if not pause_menu.visible and not show_summary and not creature_inspector.visible:
+        if not pause_menu.visible and not show_summary and not creature_inspector.visible and not show_story:
             instruction_text = font.render(
-                "Click creatures to inspect! | I: Inspector | SPACE: Pause | ESC: Menu",
+                "Click creatures! | I: Inspector | S: Story | SPACE: Pause | ESC: Menu",
                 True,
                 (255, 255, 100)
             )
