@@ -277,18 +277,29 @@ class CreatureRenderer:
         screen: pygame.Surface,
         arena
     ) -> tuple:
-        """Convert world coordinates to screen coordinates."""
+        """
+        Convert world coordinates to screen coordinates.
+        
+        Uses margins that match arena_renderer.py to ensure creatures
+        are rendered within the visible arena bounds, not under UI panels.
+        """
         screen_width = screen.get_width()
         screen_height = screen.get_height()
         
-        ui_margin_top = 100
-        ui_margin_side = 50
-        ui_margin_bottom = 150
+        # Margins match arena_renderer.py for consistency
+        # Left margin for GENETIC STRAINS panel
+        ui_margin_left = 250
+        # Right margin for CREATURES and PELLET ECOSYSTEM panels
+        ui_margin_right = 250
+        # Top margin for header/title
+        ui_margin_top = 80
+        # Bottom margin for Battle Feed
+        ui_margin_bottom = 200
         
-        arena_width = screen_width - (ui_margin_side * 2)
+        arena_width = screen_width - ui_margin_left - ui_margin_right
         arena_height = screen_height - ui_margin_top - ui_margin_bottom
         
-        screen_x = ui_margin_side + (world_pos.x / arena.width) * arena_width
+        screen_x = ui_margin_left + (world_pos.x / arena.width) * arena_width
         screen_y = ui_margin_top + (world_pos.y / arena.height) * arena_height
         
         return (int(screen_x), int(screen_y))
