@@ -14,7 +14,7 @@ Enhanced with:
 - Environmental simulation (weather, terrain, day/night, hazards)
 """
 
-from typing import List, Optional, Dict, Callable, Tuple
+from typing import List, Optional, Dict, Callable, Tuple, Any
 from enum import Enum
 from functools import lru_cache
 import random
@@ -63,6 +63,8 @@ class BattleEventType(Enum):
     PELLET_REPRODUCE = "pellet_reproduce"
     PELLET_CONSUMED = "pellet_consumed"
     PELLET_DEATH = "pellet_death"
+    # Attention/focus events
+    ATTENTION_CHANGE = "attention_change"
 
 
 class BattleEvent:
@@ -178,6 +180,18 @@ class BattleCreature:
     def is_alive(self) -> bool:
         """Check if creature is still alive."""
         return self.creature.is_alive()
+    
+    def get_attention_debug_info(self, current_time: float) -> Dict[str, Any]:
+        """
+        Get debug information about creature's attention state.
+        
+        Args:
+            current_time: Current simulation time
+            
+        Returns:
+            Dictionary with attention debug information
+        """
+        return self.attention.get_debug_info(current_time)
     
     def can_attack(self, current_time: float) -> bool:
         """Check if creature can attack based on cooldown."""
@@ -653,11 +667,28 @@ class SpatialBattle:
                 StimulusType.EXPLORING
             )
         
+        # Track previous focus to detect changes
+        previous_focus = creature.attention.get_current_focus()
+        
         # Update focus based on stimulus evaluation
         current_focus = creature.attention.evaluate_and_update_focus(
             stimuli_priorities,
             self.current_time
         )
+        
+        # Emit event if focus changed
+        if current_focus != previous_focus:
+            debug_info = creature.attention.get_debug_info(self.current_time)
+            self._emit_event(BattleEvent(
+                event_type=BattleEventType.ATTENTION_CHANGE,
+                actor=creature,
+                message=f"{creature.creature.name} switched focus: {previous_focus.value} → {current_focus.value}",
+                data={
+                    'previous_focus': previous_focus.value,
+                    'new_focus': current_focus.value,
+                    'attention_debug': debug_info
+                }
+            ))
         
         # === ACT BASED ON CURRENT FOCUS ===
         movement_target = None
