@@ -13,7 +13,7 @@ class TestPelletTraits(unittest.TestCase):
     def test_default_traits(self):
         """Test that default traits are created properly."""
         traits = PelletTraits()
-        self.assertEqual(traits.nutritional_value, 40.0)
+        self.assertEqual(traits.nutritional_value, 25.0)  # Updated from 40.0 to 25.0
         self.assertEqual(traits.growth_rate, 0.01)
         self.assertEqual(traits.spread_radius, 5)
         self.assertEqual(traits.size, 1.0)
@@ -241,9 +241,9 @@ class TestPelletCreation(unittest.TestCase):
         self.assertEqual(pellet.y, 20.0)
         self.assertEqual(pellet.generation, 3)
         
-        # Check traits are within expected ranges
-        self.assertGreaterEqual(pellet.traits.nutritional_value, 20.0)
-        self.assertLessEqual(pellet.traits.nutritional_value, 60.0)
+        # Check traits are within expected ranges (updated to 15-35)
+        self.assertGreaterEqual(pellet.traits.nutritional_value, 15.0)
+        self.assertLessEqual(pellet.traits.nutritional_value, 35.0)
     
     def test_create_pellet_from_creature(self):
         """Test creating pellets from dead creatures."""

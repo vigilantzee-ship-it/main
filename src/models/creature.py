@@ -461,17 +461,21 @@ class Creature:
             hunger_depletion *= 1.5  # 50% faster hunger depletion
         if self.has_trait("Voracious"):
             hunger_depletion *= 1.4  # 40% faster hunger depletion
+        if self.has_trait("Indiscriminate Eater"):
+            hunger_depletion *= 1.3  # 30% faster hunger depletion (eats anything but burns more)
         
         # Deplete hunger
         self.hunger = max(0, self.hunger - hunger_depletion)
     
-    def eat(self, food_value: int = 40, food_type: str = "plant") -> int:
+    def eat(self, food_value: int = 40, food_type: str = "plant", toxicity: float = 0.0, palatability: float = 0.5) -> int:
         """
         Consume food to restore hunger.
         
         Args:
             food_value: Amount of hunger to restore
             food_type: Type of food being consumed ("plant" or "creature")
+            toxicity: Toxicity level of food (0.0-1.0, higher = more toxic)
+            palatability: Palatability of food (0.0-1.0, higher = more palatable)
             
         Returns:
             Actual amount of hunger restored (0 if dietary restrictions prevent eating)
@@ -486,8 +490,43 @@ class Creature:
             if self.has_trait("Herbivore"):
                 return 0
         
+        # Picky Eater trait: refuse low quality food unless desperate
+        if self.has_trait("Picky Eater"):
+            # Only eat high-quality food (palatability > 0.6, toxicity < 0.2)
+            # Unless critically hungry (< 30)
+            if self.hunger >= 30 and (palatability <= 0.6 or toxicity >= 0.2):
+                return 0  # Refuse to eat low quality food
+        
+        # Indiscriminate Eater: reduce toxicity effect
+        if self.has_trait("Indiscriminate Eater"):
+            toxicity = toxicity * 0.5  # Take half toxicity damage
+        
+        # Calculate actual food value accounting for quality
+        actual_food_value = food_value
+        
+        # Picky Eater gets bonus nutrition from quality food
+        if self.has_trait("Picky Eater") and palatability > 0.7:
+            actual_food_value = int(food_value * 1.2)  # 20% bonus
+        
         old_hunger = self.hunger
-        self.hunger = min(self.max_hunger, self.hunger + food_value)
+        self.hunger = min(self.max_hunger, self.hunger + actual_food_value)
+        
+        # Apply toxicity damage to HP
+        if toxicity > 0:
+            toxicity_damage = int(toxicity * 20)  # Up to 20 HP damage for fully toxic food
+            if toxicity_damage > 0:
+                self.stats.take_damage(toxicity_damage)
+        
+        # Apply palatability debuff (low palatability = stress/slow)
+        if palatability < 0.4:
+            # Apply temporary speed debuff for eating unpalatable food
+            stress_modifier = StatModifier(
+                name="Stress from Unpalatable Food",
+                duration=5.0,  # 5 seconds
+                speed_multiplier=0.85,  # 15% slower
+                attack_multiplier=0.95  # 5% weaker (stressed)
+            )
+            self.add_modifier(stress_modifier)
         
         # Some traits may provide bonus HP when eating
         if self.has_trait("Voracious") or self.has_trait("Glutton"):
@@ -513,6 +552,38 @@ class Creature:
         elif food_type == "creature":
             # Herbivores cannot eat creatures
             return not self.has_trait("Herbivore")
+        return True
+    
+    def can_eat_pellet(self, toxicity: float, palatability: float) -> bool:
+        """
+        Check if creature will eat a pellet based on quality and traits.
+        
+        Args:
+            toxicity: Toxicity level of pellet (0.0-1.0)
+            palatability: Palatability of pellet (0.0-1.0)
+            
+        Returns:
+            True if creature will eat this pellet
+        """
+        # Indiscriminate Eater: eats anything
+        if self.has_trait("Indiscriminate Eater"):
+            return True
+        
+        # Picky Eater: only eats high quality unless desperate
+        if self.has_trait("Picky Eater"):
+            if self.hunger < 30:  # Desperate
+                return True
+            # Only eat high quality food
+            return palatability > 0.6 and toxicity < 0.2
+        
+        # Normal creatures: desperation eating at critical hunger
+        if self.hunger < 30:  # Critical hunger - eat anything
+            return True
+        
+        # Normal preference: avoid highly toxic or very unpalatable food
+        if toxicity > 0.5 or palatability < 0.2:
+            return False
+        
         return True
     
     def to_dict(self) -> Dict:

@@ -26,7 +26,7 @@ class PelletTraits:
         toxicity: Negative food value, reduces hunger restoration (0.0-1.0)
         palatability: Affects creature preference (0.0-1.0, higher = more preferred)
     """
-    nutritional_value: float = 40.0
+    nutritional_value: float = 25.0  # Reduced from 40.0 to 25.0 for balance
     growth_rate: float = 0.01
     spread_radius: int = 5
     size: float = 1.0
@@ -266,7 +266,7 @@ def create_random_pellet(x: float, y: float, generation: int = 0) -> Pellet:
         New Pellet with random traits
     """
     traits = PelletTraits(
-        nutritional_value=random.uniform(20.0, 60.0),
+        nutritional_value=random.uniform(15.0, 35.0),  # Reduced from 20-60 to 15-35
         growth_rate=random.uniform(0.005, 0.03),
         spread_radius=random.randint(3, 8),
         size=random.uniform(0.7, 1.3),
